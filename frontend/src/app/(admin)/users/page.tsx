@@ -6,7 +6,7 @@ import Link from "next/link";
 import { User } from "@/types/user";
 import { Role } from "@/types/role";
 import { Domain } from "@/types/domain";
-import { authService } from "@/services/api.service";
+import { authService } from "@/services/auth.service";
 import { userService } from "@/services/user.service";
 import { roleService } from "@/services/role.service";
 import { domainService } from "@/services/domain.service";
@@ -34,7 +34,7 @@ export default function UsersPage() {
   useEffect(() => {
     // Check if user is admin
     if (!authService.hasRole(["admin"])) {
-      router.push("/dashboard");
+      router.push("/");
       return;
     }
 

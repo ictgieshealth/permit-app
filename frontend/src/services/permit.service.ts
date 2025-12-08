@@ -41,12 +41,53 @@ export const permitService = {
     return response.data;
   },
 
-  async create(data: PermitCreateRequest): Promise<Permit> {
+  async create(data: PermitCreateRequest, file?: File): Promise<Permit> {
+    // If file is provided, send as multipart/form-data
+    if (file) {
+      const formData = new FormData();
+      
+      // Append all fields
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, value.toString());
+        }
+      });
+      
+      // Append file
+      formData.append("file", file);
+      
+      const response = await apiClient.post<ApiResponse<Permit>>("/permits", formData);
+      return response.data;
+    }
+    
+    // Otherwise send as JSON
     const response = await apiClient.post<ApiResponse<Permit>>("/permits", data);
     return response.data;
   },
 
-  async update(id: number, data: PermitUpdateRequest): Promise<Permit> {
+  async update(id: number, data: PermitUpdateRequest, file?: File): Promise<Permit> {
+    // If file is provided, send as multipart/form-data
+    if (file) {
+      const formData = new FormData();
+      
+      // Append all fields
+      Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          formData.append(key, value.toString());
+        }
+      });
+      
+      // Append file
+      formData.append("file", file);
+      
+      const response = await apiClient.put<ApiResponse<Permit>>(
+        `/permits/${id}`,
+        formData
+      );
+      return response.data;
+    }
+    
+    // Otherwise send as JSON
     const response = await apiClient.put<ApiResponse<Permit>>(
       `/permits/${id}`,
       data
@@ -56,5 +97,59 @@ export const permitService = {
 
   async delete(id: number): Promise<void> {
     await apiClient.delete(`/permits/${id}`);
+  },
+
+  async uploadDocument(id: number, file: File): Promise<Permit> {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await apiClient.post<ApiResponse<Permit>>(
+      `/permits/${id}/upload`,
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+    return response.data;
+  },
+
+  async downloadDocument(id: number): Promise<void> {
+    const response = await apiClient.get(`/permits/${id}/download`, {
+      responseType: "blob",
+    });
+
+    // Create blob link to download
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    
+    // Get filename from Content-Disposition header if available
+    const contentDisposition = response.headers["content-disposition"];
+    let filename = "document";
+    if (contentDisposition) {
+      const matches = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(contentDisposition);
+      if (matches != null && matches[1]) {
+        filename = matches[1].replace(/['"]/g, "");
+      }
+    }
+    
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  getPreviewUrl(id: number): string {
+    return `${apiClient.getBaseUrl()}/permits/${id}/preview`;
+  },
+
+  async getPreviewBlob(id: number): Promise<Blob> {
+    const response = await apiClient.get(`/permits/${id}/preview`, {
+      responseType: "blob",
+    });
+    return response.data;
   },
 };

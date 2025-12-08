@@ -5,10 +5,12 @@ import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Link from "next/link";
+import FileUpload from "@/components/form/FileUpload";
 import { Domain } from "@/types/domain";
 import { Division } from "@/types/division";
 import { PermitType } from "@/types/permitType";
 import { User } from "@/types/user";
+import { Permit } from "@/types/permit";
 import { permitService } from "@/services/permit.service";
 import { domainService } from "@/services/domain.service";
 import { divisionService } from "@/services/division.service";
@@ -23,6 +25,8 @@ export default function EditPermitPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [currentPermit, setCurrentPermit] = useState<Permit | null>(null);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [permitTypes, setPermitTypes] = useState<PermitType[]>([]);
@@ -49,6 +53,15 @@ export default function EditPermitPage() {
     loadDomains();
     loadPermitTypes();
     loadUsers();
+    return () => {
+      // Cleanup blob URLs when component unmounts
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      if (newFilePreview && newFilePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(newFilePreview);
+      }
+    };
   }, [permitId]);
 
   useEffect(() => {
@@ -62,6 +75,14 @@ export default function EditPermitPage() {
   const loadPermit = async () => {
     try {
       const permit = await permitService.getById(permitId);
+      setCurrentPermit(permit);
+      if (permit.doc_file_name && isPreviewable(permit.doc_file_type)) {
+        // Load preview blob with authorization
+        const blob = await permitService.getPreviewBlob(permitId);
+        const blobUrl = URL.createObjectURL(blob);
+        setPreviewUrl(blobUrl);
+        setShowPreview(true);
+      }
       setFormData({
         domain_id: permit.domain_id.toString(),
         division_id: permit.division_id ? permit.division_id.toString() : "",
@@ -83,6 +104,19 @@ export default function EditPermitPage() {
       setError(err.message || "Failed to load permit");
       setLoading(false);
     }
+  };
+
+  const isPreviewable = (fileType?: string | null) => {
+    if (!fileType) return false;
+    const previewableTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp"
+    ];
+    return previewableTypes.includes(fileType.toLowerCase());
   };
 
   const loadDomains = async () => {
@@ -128,6 +162,21 @@ export default function EditPermitPage() {
     setFormData({ ...formData, [name]: value });
   };
 
+  const handleDownloadDocument = async () => {
+    try {
+      await permitService.downloadDocument(permitId);
+    } catch (err: any) {
+      setError(err.message || "Failed to download document");
+    }
+  };
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (!bytes) return "-";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -159,7 +208,7 @@ export default function EditPermitPage() {
         doc_name: formData.doc_name || undefined,
         doc_number: formData.doc_number || undefined,
         status: formData.status,
-      });
+      }, uploadedFile || undefined);
 
       router.push("/permits");
     } catch (err: any) {
@@ -407,6 +456,74 @@ export default function EditPermitPage() {
                 placeholder="Enter document number"
               />
             </div>
+          </div>
+
+          {/* Current Document Info */}
+          {currentPermit?.doc_file_name && (
+            <div className="p-4 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
+              <h4 className="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                Current Document
+              </h4>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div>
+                  <label className="block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                    File Name
+                  </label>
+                  <p className="text-sm text-gray-900 break-all dark:text-white">
+                    {currentPermit.doc_file_name}
+                  </p>
+                </div>
+                <div>
+                  <label className="block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                    File Size
+                  </label>
+                  <p className="text-sm text-gray-900 dark:text-white">
+                    {formatFileSize(currentPermit.doc_file_size)}
+                  </p>
+                </div>
+                <div>
+                  <label className="block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                    File Type
+                  </label>
+                  <p className="text-sm text-gray-900 dark:text-white">
+                    {currentPermit.doc_file_type || "-"}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3">
+                <Button
+                  type="button"
+                  onClick={handleDownloadDocument}
+                  className="text-sm bg-blue-600 hover:bg-blue-700"
+                >
+                  📥 Download Current Document
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Upload New Document */}
+          <div>
+            <Label>
+              {currentPermit?.doc_file_name ? "Replace Document (Optional)" : "Upload Document"}
+            </Label>
+            <FileUpload
+              onFileSelect={(file) => setUploadedFile(file)}
+              disabled={saving}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              {currentPermit?.doc_file_name 
+                ? "Upload a new file to replace the current document. Leave empty to keep existing."
+                : "Allowed file types: PDF, DOC, DOCX, JPG, PNG (max 10MB)"
+              }
+            </p>
+            {uploadedFile && (
+              <div className="p-3 mt-2 border border-green-200 rounded-lg bg-green-50 dark:bg-green-900/20 dark:border-green-800">
+                <p className="text-sm text-green-700 dark:text-green-400">
+                  ✓ New file selected: <strong>{uploadedFile.name}</strong> ({formatFileSize(uploadedFile.size)})
+                </p>
+              </div>
+            )}
           </div>
 
           <div>

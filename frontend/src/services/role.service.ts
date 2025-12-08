@@ -3,7 +3,7 @@ import { ApiResponse } from "@/types/api";
 import { Role } from "@/types/role";
 
 export const roleService = {
-  async getAll(params?: { page?: number; limit?: number }) {
+  async getAll(params?: { page?: number; limit?: number; is_active?: boolean }) {
     const queryParams = new URLSearchParams();
     if (params) {
       Object.entries(params).forEach(([key, value]) => {

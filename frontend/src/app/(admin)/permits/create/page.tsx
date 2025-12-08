@@ -5,21 +5,25 @@ import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Link from "next/link";
+import FileUpload from "@/components/form/FileUpload";
 import { Domain } from "@/types/domain";
 import { Division } from "@/types/division";
 import { PermitType } from "@/types/permitType";
 import { User } from "@/types/user";
-import { authService } from "@/services/api.service";
+import { authService } from "@/services/auth.service";
 import { permitService } from "@/services/permit.service";
 import { domainService } from "@/services/domain.service";
 import { divisionService } from "@/services/division.service";
 import { permitTypeService } from "@/services/permitType.service";
 import { userService } from "@/services/user.service";
+import { useUserDomains } from "@/hooks/useUserDomains";
 
 export default function CreatePermitPage() {
   const router = useRouter();
+  const { userDomains, hasMultipleDomains, singleDomainId } = useUserDomains();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [permitTypes, setPermitTypes] = useState<PermitType[]>([]);
@@ -42,28 +46,24 @@ export default function CreatePermitPage() {
   });
 
   useEffect(() => {
-    loadDomains();
+    setDomains(userDomains);
     loadPermitTypes();
     loadUsers();
-  }, []);
+    
+    // Auto-select domain if user only has one
+    if (singleDomainId) {
+      setFormData(prev => ({ ...prev, domain_id: singleDomainId.toString() }));
+    }
+  }, [userDomains, singleDomainId]);
 
   useEffect(() => {
     if (formData.domain_id) {
       loadDivisions(parseInt(formData.domain_id));
     } else {
       setDivisions([]);
-      setFormData({ ...formData, division_id: "" });
+      setFormData(prev => ({ ...prev, division_id: "" }));
     }
   }, [formData.domain_id]);
-
-  const loadDomains = async () => {
-    try {
-      const response = await domainService.getAll({ limit: 100, is_active: true });
-      setDomains(response.data);
-    } catch (err) {
-      console.error("Failed to load domains:", err);
-    }
-  };
 
   const loadDivisions = async (domainId: number) => {
     try {
@@ -115,7 +115,7 @@ export default function CreatePermitPage() {
 
     setLoading(true);
     try {
-      await permitService.create({
+      const createdPermit = await permitService.create({
         domain_id: parseInt(formData.domain_id),
         division_id: formData.division_id ? parseInt(formData.division_id) : undefined,
         permit_type_id: parseInt(formData.permit_type_id),
@@ -130,7 +130,7 @@ export default function CreatePermitPage() {
         doc_name: formData.doc_name || undefined,
         doc_number: formData.doc_number || undefined,
         status: formData.status,
-      });
+      }, uploadedFile || undefined);
 
       router.push("/permits");
     } catch (err: any) {
@@ -177,7 +177,8 @@ export default function CreatePermitPage() {
                 value={formData.domain_id}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                disabled={!hasMultipleDomains}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:bg-gray-100 disabled:cursor-not-allowed dark:disabled:bg-gray-900"
               >
                 <option value="">Select a domain</option>
                 {domains.map((domain) => (
@@ -186,6 +187,11 @@ export default function CreatePermitPage() {
                   </option>
                 ))}
               </select>
+              {!hasMultipleDomains && singleDomainId && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Domain is auto-selected based on your access
+                </p>
+              )}
             </div>
 
             <div>
@@ -278,12 +284,16 @@ export default function CreatePermitPage() {
               <Label>
                 Effective Date <span className="text-error-500">*</span>
               </Label>
-              <Input
+              <input
                 name="effective_date"
                 type="date"
                 value={formData.effective_date}
                 onChange={handleChange}
                 required
+                min="2000-01-01"
+                max="2099-12-31"
+                style={{ colorScheme: 'light' }}
+                className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               />
             </div>
 
@@ -291,12 +301,16 @@ export default function CreatePermitPage() {
               <Label>
                 Expiry Date <span className="text-error-500">*</span>
               </Label>
-              <Input
+              <input
                 name="expiry_date"
                 type="date"
                 value={formData.expiry_date}
                 onChange={handleChange}
                 required
+                min="2000-01-01"
+                max="2099-12-31"
+                style={{ colorScheme: 'light' }}
+                className="w-full h-10 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
               />
             </div>
           </div>
@@ -370,6 +384,17 @@ export default function CreatePermitPage() {
                 placeholder="Enter document number"
               />
             </div>
+          </div>
+
+          <div>
+            <Label>Upload Document</Label>
+            <FileUpload
+              onFileSelect={(file) => setUploadedFile(file)}
+              disabled={loading}
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              Allowed file types: PDF, DOC, DOCX, JPG, PNG (max 10MB)
+            </p>
           </div>
 
           <div>

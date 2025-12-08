@@ -5,7 +5,8 @@ import Button from "@/components/ui/button/Button";
 import Link from "next/link";
 import { Permit } from "@/types/permit";
 import { permitService } from "@/services/permit.service";
-import { authService } from "@/services/api.service";
+import { authService } from "@/services/auth.service";
+import { ConfirmModal } from "@/components/ui/modal/ConfirmModal";
 
 export default function PermitsPage() {
   const router = useRouter();
@@ -21,6 +22,12 @@ export default function PermitsPage() {
     status: "",
     application_type: "",
   });
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    permitId: number | null;
+    permitNo: string;
+  }>({ isOpen: false, permitId: null, permitNo: "" });
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadPermits();
@@ -43,14 +50,22 @@ export default function PermitsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this permit?")) return;
+  const handleDelete = (id: number, permitNo: string) => {
+    setDeleteModal({ isOpen: true, permitId: id, permitNo: permitNo });
+  };
 
+  const confirmDelete = async () => {
+    if (!deleteModal.permitId) return;
+
+    setDeleting(true);
     try {
-      await permitService.delete(id);
+      await permitService.delete(deleteModal.permitId);
+      setDeleteModal({ isOpen: false, permitId: null, permitNo: "" });
       loadPermits();
     } catch (err: any) {
       alert(err.message || "Failed to delete permit");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -241,20 +256,34 @@ export default function PermitsPage() {
                     <td className="px-4 py-3 text-sm">
                       <div className="flex gap-2">
                         <Link href={`/permits/${permit.id}`}>
-                          <button className="text-brand-500 hover:text-brand-600">
-                            View
+                          <button 
+                            className="p-2 text-brand-500 transition-colors rounded-lg hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-900/20"
+                            title="View"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
                           </button>
                         </Link>
                         <Link href={`/permits/${permit.id}/edit`}>
-                          <button className="text-blue-500 hover:text-blue-600">
-                            Edit
+                          <button 
+                            className="p-2 text-blue-500 transition-colors rounded-lg hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/20"
+                            title="Edit"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
                           </button>
                         </Link>
                         <button
-                          onClick={() => handleDelete(permit.id)}
-                          className="text-error-500 hover:text-error-600"
+                          onClick={() => handleDelete(permit.id, permit.permit_no)}
+                          className="p-2 text-error-500 transition-colors rounded-lg hover:bg-error-50 hover:text-error-600 dark:hover:bg-error-900/20"
+                          title="Delete"
                         >
-                          Delete
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
                         </button>
                       </div>
                     </td>
@@ -293,6 +322,19 @@ export default function PermitsPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, permitId: null, permitNo: "" })}
+        onConfirm={confirmDelete}
+        title="Delete Permit"
+        message={`Are you sure you want to delete permit "${deleteModal.permitNo}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        type="danger"
+        loading={deleting}
+      />
     </div>
   );
 }

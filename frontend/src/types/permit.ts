@@ -13,6 +13,10 @@ export interface Permit {
   responsible_doc_person_id?: number | null;
   doc_name?: string | null;
   doc_number?: string | null;
+  doc_file_name?: string | null;
+  doc_file_path?: string | null;
+  doc_file_size?: number | null;
+  doc_file_type?: string | null;
   status: string;
   created_at: string;
   updated_at: string;

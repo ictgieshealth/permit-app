@@ -38,6 +38,11 @@ export const authService = {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
     localStorage.removeItem(STORAGE_KEYS.USER);
     localStorage.removeItem(STORAGE_KEYS.DOMAIN);
+  },  
+
+  async getProfile(): Promise<User> {
+    const response = await apiClient.get<ApiResponse<User>>('/auth/profile');
+    return response.data;
   },
 
   getStoredUser(): User | null {
@@ -63,4 +68,5 @@ export const authService = {
     if (!user || !user.role) return false;
     return allowedRoles.includes(user.role.name);
   },
+
 };

@@ -1,7 +1,9 @@
 export interface PermitType {
   id: number;
-  division_id?: number | null;
+  code: string;
   name: string;
+  description?: string;
+  division_id?: number | null;
   risk_point?: string | null;
   default_application_type?: string | null;
   default_validity_period?: string | null;

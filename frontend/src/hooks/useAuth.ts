@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { authService } from '@/services/api.service';
+import { authService } from '@/services/auth.service';
 
 export function useAuth(requireAuth: boolean = true) {
     const router = useRouter();

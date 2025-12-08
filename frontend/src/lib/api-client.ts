@@ -2,6 +2,7 @@ import { API_BASE_URL, STORAGE_KEYS } from '@/config/api';
 
 interface RequestOptions extends RequestInit {
   requireAuth?: boolean;
+  responseType?: 'json' | 'blob';
 }
 
 class ApiClient {
@@ -11,10 +12,13 @@ class ApiClient {
     this.baseURL = baseURL;
   }
 
-  private getHeaders(requireAuth: boolean = true): HeadersInit {
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json',
-    };
+  private getHeaders(requireAuth: boolean = true, isFormData: boolean = false): HeadersInit {
+    const headers: HeadersInit = {};
+
+    // Only set Content-Type for JSON requests, not for FormData
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (requireAuth && typeof window !== 'undefined') {
       const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
@@ -30,17 +34,18 @@ class ApiClient {
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<T> {
-    const { requireAuth = true, ...fetchOptions } = options;
+    const { requireAuth = true, responseType = 'json', ...fetchOptions } = options;
+    
+    // Check if body is FormData
+    const isFormData = fetchOptions.body instanceof FormData;
 
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       ...fetchOptions,
       headers: {
-        ...this.getHeaders(requireAuth),
+        ...this.getHeaders(requireAuth, isFormData),
         ...fetchOptions.headers,
       },
     });
-
-    const data = await response.json();
 
     if (!response.ok) {
       // If unauthorized and it's an authentication error, clear stored credentials
@@ -54,14 +59,23 @@ class ApiClient {
         // }
       }
       
+      const data = await response.json().catch(() => ({}));
       throw new Error(data.message || `HTTP error! status: ${response.status}`);
     }
 
-    return data;
+    if (responseType === 'blob') {
+      return response.blob() as T;
+    }
+
+    return response.json();
   }
 
-  async get<T>(endpoint: string, requireAuth: boolean = true): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET', requireAuth });
+  async get<T>(endpoint: string, options?: { requireAuth?: boolean; responseType?: 'json' | 'blob' }): Promise<T> {
+    return this.request<T>(endpoint, { 
+      method: 'GET', 
+      requireAuth: options?.requireAuth ?? true,
+      responseType: options?.responseType ?? 'json'
+    });
   }
 
   async post<T>(
@@ -71,7 +85,7 @@ class ApiClient {
   ): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
       requireAuth,
     });
   }
@@ -83,13 +97,17 @@ class ApiClient {
   ): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'PUT',
-      body: body ? JSON.stringify(body) : undefined,
+      body: body instanceof FormData ? body : (body ? JSON.stringify(body) : undefined),
       requireAuth,
     });
   }
 
   async delete<T>(endpoint: string, requireAuth: boolean = true): Promise<T> {
     return this.request<T>(endpoint, { method: 'DELETE', requireAuth });
+  }
+
+  getBaseUrl(): string {
+    return this.baseURL;
   }
 }
 

@@ -7,7 +7,7 @@ import Label from "@/components/form/Label";
 import Link from "next/link";
 import { Role } from "@/types/role";
 import { Domain } from "@/types/domain";
-import { authService } from "@/services/api.service";
+import { authService } from "@/services/auth.service";
 import { roleService } from "@/services/role.service";
 import { domainService } from "@/services/domain.service";
 import { userService } from "@/services/user.service";
@@ -31,7 +31,7 @@ export default function CreateUserPage() {
 
   useEffect(() => {
     if (!authService.hasRole(["admin"])) {
-      router.push("/dashboard");
+      router.push("/");
       return;
     }
 

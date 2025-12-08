@@ -30,6 +30,21 @@ export default function ViewPermitPage() {
     }
   };
 
+  const handleDownloadDocument = async () => {
+    try {
+      await permitService.downloadDocument(permitId);
+    } catch (err: any) {
+      setError(err.message || "Failed to download document");
+    }
+  };
+
+  const formatFileSize = (bytes?: number | null) => {
+    if (!bytes) return "-";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("id-ID", {
       year: "numeric",
@@ -275,6 +290,50 @@ export default function ViewPermitPage() {
                 )}
               </div>
             </div>
+
+            {/* Uploaded File Information */}
+            {permit.doc_file_name && (
+              <div className="p-4 mt-4 border border-gray-200 rounded-lg bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
+                <h4 className="mb-3 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Uploaded Document
+                </h4>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                      File Name
+                    </label>
+                    <p className="text-sm text-gray-900 break-all dark:text-white">
+                      {permit.doc_file_name}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                      File Size
+                    </label>
+                    <p className="text-sm text-gray-900 dark:text-white">
+                      {formatFileSize(permit.doc_file_size)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">
+                      File Type
+                    </label>
+                    <p className="text-sm text-gray-900 dark:text-white">
+                      {permit.doc_file_type || "-"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    onClick={handleDownloadDocument}
+                    className="text-sm bg-blue-600 hover:bg-blue-700"
+                  >
+                    📥 Download Document
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Timestamps */}
