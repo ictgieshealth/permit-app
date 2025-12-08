@@ -1,0 +1,406 @@
+"use client";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Button from "@/components/ui/button/Button";
+import Input from "@/components/form/input/InputField";
+import Label from "@/components/form/Label";
+import Link from "next/link";
+import { Domain } from "@/types/domain";
+import { Division } from "@/types/division";
+import { PermitType } from "@/types/permitType";
+import { User } from "@/types/user";
+import { authService } from "@/services/api.service";
+import { permitService } from "@/services/permit.service";
+import { domainService } from "@/services/domain.service";
+import { divisionService } from "@/services/division.service";
+import { permitTypeService } from "@/services/permitType.service";
+import { userService } from "@/services/user.service";
+
+export default function CreatePermitPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [domains, setDomains] = useState<Domain[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+  const [permitTypes, setPermitTypes] = useState<PermitType[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [formData, setFormData] = useState({
+    domain_id: "",
+    division_id: "",
+    permit_type_id: "",
+    name: "",
+    application_type: "",
+    permit_no: "",
+    effective_date: "",
+    expiry_date: "",
+    effective_term: "",
+    responsible_person_id: "",
+    responsible_doc_person_id: "",
+    doc_name: "",
+    doc_number: "",
+    status: "active",
+  });
+
+  useEffect(() => {
+    loadDomains();
+    loadPermitTypes();
+    loadUsers();
+  }, []);
+
+  useEffect(() => {
+    if (formData.domain_id) {
+      loadDivisions(parseInt(formData.domain_id));
+    } else {
+      setDivisions([]);
+      setFormData({ ...formData, division_id: "" });
+    }
+  }, [formData.domain_id]);
+
+  const loadDomains = async () => {
+    try {
+      const response = await domainService.getAll({ limit: 100, is_active: true });
+      setDomains(response.data);
+    } catch (err) {
+      console.error("Failed to load domains:", err);
+    }
+  };
+
+  const loadDivisions = async (domainId: number) => {
+    try {
+      const response = await divisionService.getAll({ limit: 100, domain_id: domainId });
+      setDivisions(response.data);
+    } catch (err) {
+      console.error("Failed to load divisions:", err);
+    }
+  };
+
+  const loadPermitTypes = async () => {
+    try {
+      const response = await permitTypeService.getAll({ limit: 100 });
+      setPermitTypes(response.data);
+    } catch (err) {
+      console.error("Failed to load permit types:", err);
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const response = await userService.getAll({ limit: 100, is_active: true });
+      setUsers(response.data);
+    } catch (err) {
+      console.error("Failed to load users:", err);
+    }
+  };
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+
+    if (!formData.domain_id) {
+      setError("Please select a domain");
+      return;
+    }
+
+    if (!formData.permit_type_id) {
+      setError("Please select a permit type");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await permitService.create({
+        domain_id: parseInt(formData.domain_id),
+        division_id: formData.division_id ? parseInt(formData.division_id) : undefined,
+        permit_type_id: parseInt(formData.permit_type_id),
+        name: formData.name,
+        application_type: formData.application_type,
+        permit_no: formData.permit_no,
+        effective_date: formData.effective_date,
+        expiry_date: formData.expiry_date,
+        effective_term: formData.effective_term || undefined,
+        responsible_person_id: formData.responsible_person_id ? parseInt(formData.responsible_person_id) : undefined,
+        responsible_doc_person_id: formData.responsible_doc_person_id ? parseInt(formData.responsible_doc_person_id) : undefined,
+        doc_name: formData.doc_name || undefined,
+        doc_number: formData.doc_number || undefined,
+        status: formData.status,
+      });
+
+      router.push("/permits");
+    } catch (err: any) {
+      setError(err.message || "Failed to create permit");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-4xl p-6 mx-auto">
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <Link
+            href="/permits"
+            className="text-gray-500 hover:text-gray-700 dark:text-gray-400"
+          >
+            ← Back
+          </Link>
+        </div>
+        <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
+          Create New Permit
+        </h1>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+          Add a new permit to the system
+        </p>
+      </div>
+
+      <div className="p-6 bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {error && (
+            <div className="p-3 text-sm border rounded-lg bg-error-50 border-error-200 text-error-700 dark:bg-error-900/20">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Label>
+                Domain <span className="text-error-500">*</span>
+              </Label>
+              <select
+                name="domain_id"
+                value={formData.domain_id}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              >
+                <option value="">Select a domain</option>
+                {domains.map((domain) => (
+                  <option key={domain.id} value={domain.id}>
+                    {domain.name} ({domain.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label>
+                Category <span className="text-error-500">*</span>
+              </Label>
+              <select
+                name="permit_type_id"
+                value={formData.permit_type_id}
+                onChange={handleChange}
+                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              >
+                <option value="">Select a category</option>
+                {permitTypes.map((type) => (
+                  <option key={type.id} value={type.id}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Label>
+                Permit Name <span className="text-error-500">*</span>
+              </Label>
+              <Input
+                name="name"
+                type="text"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                placeholder="Enter permit name (equipment/service/competency/operational)"
+              />
+            </div>
+
+            <div>
+              <Label>Division</Label>
+              <select
+                name="division_id"
+                value={formData.division_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                disabled={!formData.domain_id}
+              >
+                <option value="">Select a division</option>
+                {divisions.map((division) => (
+                  <option key={division.id} value={division.id}>
+                    {division.name} ({division.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Label>
+                Permit Number <span className="text-error-500">*</span>
+              </Label>
+              <Input
+                name="permit_no"
+                type="text"
+                value={formData.permit_no}
+                onChange={handleChange}
+                required
+                placeholder="Enter permit number"
+              />
+            </div>
+
+            <div>
+              <Label>
+                Application Type <span className="text-error-500">*</span>
+              </Label>
+              <Input
+                name="application_type"
+                type="text"
+                value={formData.application_type}
+                onChange={handleChange}
+                required
+                placeholder="Enter application type"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Label>
+                Effective Date <span className="text-error-500">*</span>
+              </Label>
+              <Input
+                name="effective_date"
+                type="date"
+                value={formData.effective_date}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div>
+              <Label>
+                Expiry Date <span className="text-error-500">*</span>
+              </Label>
+              <Input
+                name="expiry_date"
+                type="date"
+                value={formData.expiry_date}
+                onChange={handleChange}
+                required
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Effective Term</Label>
+            <Input
+              name="effective_term"
+              type="text"
+              value={formData.effective_term}
+              onChange={handleChange}
+              placeholder="Enter effective term (e.g., 1 year)"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Label>Permit Responsible Person</Label>
+              <select
+                name="responsible_person_id"
+                value={formData.responsible_person_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              >
+                <option value="">Select a person</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.full_name} ({user.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label>Document Responsible Person</Label>
+              <select
+                name="responsible_doc_person_id"
+                value={formData.responsible_doc_person_id}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              >
+                <option value="">Select a person</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.full_name} ({user.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Label>Document Name</Label>
+              <Input
+                name="doc_name"
+                type="text"
+                value={formData.doc_name}
+                onChange={handleChange}
+                placeholder="Enter document name"
+              />
+            </div>
+
+            <div>
+              <Label>Document Number</Label>
+              <Input
+                name="doc_number"
+                type="text"
+                value={formData.doc_number}
+                onChange={handleChange}
+                placeholder="Enter document number"
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>
+              Status <span className="text-error-500">*</span>
+            </Label>
+            <select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="active">Active</option>
+              <option value="expired">Expired</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Create Permit"}
+            </Button>
+            <Link href="/permits">
+              <Button type="button" className="bg-gray-500 hover:bg-gray-600">
+                Cancel
+              </Button>
+            </Link>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
