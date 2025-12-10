@@ -31,11 +31,11 @@ Sistem notifikasi lengkap untuk mengingatkan user tentang permit yang akan expir
 ### Backend Configuration (.env)
 ```env
 # Mail Configuration
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=465
-MAIL_USERNAME=rstd@rs-triadipa.com
-MAIL_PASSWORD=amhrccoknmdssiww
-MAIL_FROM_ADDRESS=rstd@rs-triadipa.com
+MAIL_HOST=
+MAIL_PORT=
+MAIL_USERNAME=
+MAIL_PASSWORD=
+MAIL_FROM_ADDRESS=
 MAIL_FROM_NAME=Permit Management System
 ```
 
