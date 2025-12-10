@@ -1,6 +1,6 @@
 import { apiClient } from "@/lib/api-client";
 import { ApiResponse } from "@/types/api";
-import { ChangePasswordRequest, User, UserRequest, UserUpdateRequest } from "@/types/user";
+import { ChangePasswordRequest, UpdateProfileRequest, User, UserRequest, UserUpdateRequest } from "@/types/user";
 
 export const userService = {
   async getAll(params?: {
@@ -70,5 +70,10 @@ export const userService = {
       `/users/${id}/domains/${domainId}/set-default`,
       {}
     );
+  },
+
+  async updateProfile(data: UpdateProfileRequest) {
+    const response = await apiClient.put<ApiResponse<User>>('/auth/profile', data);
+    return response.data;
   },
 };

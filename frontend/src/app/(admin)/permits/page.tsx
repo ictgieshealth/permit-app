@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Button from "@/components/ui/button/Button";
 import Link from "next/link";
 import { Permit } from "@/types/permit";
@@ -10,6 +10,9 @@ import { ConfirmModal } from "@/components/ui/modal/ConfirmModal";
 
 export default function PermitsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const searchQuery = searchParams.get("search");
+  
   const [permits, setPermits] = useState<Permit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,18 +34,30 @@ export default function PermitsPage() {
 
   useEffect(() => {
     loadPermits();
-  }, [page, filters]);
+  }, [page, filters, searchQuery]);
 
   const loadPermits = async () => {
     try {
       setLoading(true);
-      const response = await permitService.getAll({
-        page,
-        limit,
-        ...filters,
-      });
-      setPermits(response.data);
-      setTotal(response.meta?.total || 0);
+      
+      // If there's a search query, use search endpoint
+      if (searchQuery) {
+        const response = await permitService.search(searchQuery, {
+          page,
+          limit,
+        });
+        setPermits(response.data);
+        setTotal(response.meta?.total || 0);
+      } else {
+        // Otherwise use normal getAll
+        const response = await permitService.getAll({
+          page,
+          limit,
+          ...filters,
+        });
+        setPermits(response.data);
+        setTotal(response.meta?.total || 0);
+      }
     } catch (err: any) {
       setError(err.message || "Failed to load permits");
     } finally {
@@ -87,7 +102,14 @@ export default function PermitsPage() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (permit: Permit) => {
+    const now = new Date();
+    const expiryDate = new Date(permit.expiry_date);
+    
+    // Check if permit is expired based on date
+    const isExpired = expiryDate < now && permit.status !== "inactive";
+    const displayStatus = isExpired ? "expired" : permit.status;
+    
     const statusClasses = {
       active: "bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-400",
       expired: "bg-error-100 text-error-700 dark:bg-error-900/20 dark:text-error-400",
@@ -97,10 +119,10 @@ export default function PermitsPage() {
     return (
       <span
         className={`px-2 py-1 text-xs font-medium rounded-full ${
-          statusClasses[status as keyof typeof statusClasses] || statusClasses.inactive
+          statusClasses[displayStatus as keyof typeof statusClasses] || statusClasses.inactive
         }`}
       >
-        {status}
+        {displayStatus}
       </span>
     );
   };
@@ -123,54 +145,69 @@ export default function PermitsPage() {
             Permit Management
           </h1>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            Manage all permits and their details
+            {searchQuery 
+              ? `Search results for "${searchQuery}"`
+              : "Manage all permits and their details"
+            }
           </p>
         </div>
-        <Link href="/permits/create">
-          <Button>+ Create Permit</Button>
-        </Link>
-      </div>
-
-      {/* Filters */}
-      <div className="p-4 mb-6 bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <input
-            type="text"
-            name="permit_no"
-            placeholder="Search by Permit No..."
-            value={filters.permit_no}
-            onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-          />
-          <input
-            type="text"
-            name="equipment_name"
-            placeholder="Search by Equipment/Services..."
-            value={filters.equipment_name}
-            onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-          />
-          <input
-            type="text"
-            name="application_type"
-            placeholder="Search by Application Type..."
-            value={filters.application_type}
-            onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-          />
-          <select
-            name="status"
-            value={filters.status}
-            onChange={handleFilterChange}
-            className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-          >
-            <option value="">All Status</option>
-            <option value="active">Active</option>
-            <option value="expired">Expired</option>
-            <option value="inactive">Inactive</option>
-          </select>
+        <div className="flex items-center gap-3">
+          {searchQuery && (
+            <button
+              onClick={() => router.push("/permits")}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-700"
+            >
+              Clear Search
+            </button>
+          )}
+          <Link href="/permits/create">
+            <Button>+ Create Permit</Button>
+          </Link>
         </div>
       </div>
+
+      {/* Filters - Only show when not searching */}
+      {!searchQuery && (
+        <div className="p-4 mb-6 bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <input
+              type="text"
+              name="permit_no"
+              placeholder="Search by Permit No..."
+              value={filters.permit_no}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            />
+            <input
+              type="text"
+              name="equipment_name"
+              placeholder="Search by Equipment/Services..."
+              value={filters.equipment_name}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            />
+            <input
+              type="text"
+              name="application_type"
+              placeholder="Search by Application Type..."
+              value={filters.application_type}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            />
+            <select
+              name="status"
+              value={filters.status}
+              onChange={handleFilterChange}
+              className="px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            >
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="expired">Expired</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="p-3 mb-4 text-sm border rounded-lg bg-error-50 border-error-200 text-error-700 dark:bg-error-900/20">
@@ -251,7 +288,7 @@ export default function PermitsPage() {
                       {formatDate(permit.expiry_date)}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {getStatusBadge(permit.status)}
+                      {getStatusBadge(permit)}
                     </td>
                     <td className="px-4 py-3 text-sm">
                       <div className="flex gap-2">

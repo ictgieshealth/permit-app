@@ -22,9 +22,14 @@ export default function PermitStatusChart() {
     }
   };
 
+  const now = new Date();
   const statusCounts = {
     active: permits.filter((p) => p.status === "active").length,
-    expired: permits.filter((p) => p.status === "expired").length,
+    // Count expired based on expiry_date, not status field
+    expired: permits.filter((p) => {
+      const expiryDate = new Date(p.expiry_date);
+      return expiryDate < now && p.status !== "inactive";
+    }).length,
     inactive: permits.filter((p) => p.status === "inactive").length,
   };
 

@@ -29,8 +29,14 @@ export default function DashboardMetrics() {
         domainService.getAll({ limit: 1000 }),
       ]);
 
+      const now = new Date();
       const activePermits = permits.data.filter((p) => p.status === "active").length;
-      const expiredPermits = permits.data.filter((p) => p.status === "expired").length;
+      
+      // Count expired permits based on expiry_date, not status
+      const expiredPermits = permits.data.filter((p) => {
+        const expiryDate = new Date(p.expiry_date);
+        return expiryDate < now && p.status !== "inactive";
+      }).length;
 
       setStats({
         totalPermits: permits.data.length,

@@ -24,6 +24,8 @@ export default function CreateUserPage() {
     password: "",
     confirm_password: "",
     full_name: "",
+    phone_number: "",
+    nip: "",
     role_id: "",
     is_active: true,
     domain_ids: [] as number[],
@@ -106,6 +108,8 @@ export default function CreateUserPage() {
         email: formData.email,
         password: formData.password,
         full_name: formData.full_name,
+        phone_number: formData.phone_number,
+        nip: formData.nip,
         role_id: parseInt(formData.role_id),
         is_active: formData.is_active,
         domain_ids: formData.domain_ids,
@@ -186,6 +190,30 @@ export default function CreateUserPage() {
               required
               placeholder="Enter full name"
             />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <Label>Phone Number</Label>
+              <Input
+                name="phone_number"
+                type="text"
+                value={formData.phone_number}
+                onChange={handleChange}
+                placeholder="Enter phone number"
+              />
+            </div>
+
+            <div>
+              <Label>NIP</Label>
+              <Input
+                name="nip"
+                type="text"
+                value={formData.nip}
+                onChange={handleChange}
+                placeholder="Enter NIP"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">

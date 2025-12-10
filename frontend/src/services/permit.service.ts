@@ -152,4 +152,24 @@ export const permitService = {
     });
     return response.data;
   },
+
+  async search(
+    query: string,
+    params: { page?: number; limit?: number } = {}
+  ): Promise<
+    ApiResponse<Permit[]> & {
+      meta?: { page: number; limit: number; total: number };
+    }
+  > {
+    const queryParams = new URLSearchParams();
+    queryParams.append("q", query);
+    
+    if (params.page) queryParams.append("page", params.page.toString());
+    if (params.limit) queryParams.append("limit", params.limit.toString());
+
+    const response = await apiClient.get<ApiResponse<Permit[]>>(
+      `/permits/search?${queryParams.toString()}`
+    );
+    return response as any;
+  },
 };

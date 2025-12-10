@@ -31,7 +31,14 @@ export default function RecentPermits() {
     });
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (permit: Permit) => {
+    const now = new Date();
+    const expiryDate = new Date(permit.expiry_date);
+    
+    // Check if permit is expired based on date
+    const isExpired = expiryDate < now && permit.status !== "inactive";
+    const displayStatus = isExpired ? "expired" : permit.status;
+    
     const statusClasses = {
       active:
         "bg-success-100 text-success-700 dark:bg-success-900/20 dark:text-success-400",
@@ -44,11 +51,11 @@ export default function RecentPermits() {
     return (
       <span
         className={`px-2 py-1 text-xs font-medium rounded-full ${
-          statusClasses[status as keyof typeof statusClasses] ||
+          statusClasses[displayStatus as keyof typeof statusClasses] ||
           statusClasses.inactive
         }`}
       >
-        {status}
+        {displayStatus}
       </span>
     );
   };
@@ -108,7 +115,7 @@ export default function RecentPermits() {
                     Expires: {formatDate(permit.expiry_date)}
                   </p>
                 </div>
-                <div>{getStatusBadge(permit.status)}</div>
+                <div>{getStatusBadge(permit)}</div>
               </div>
             </Link>
           ))
