@@ -1,0 +1,26 @@
+# /etc/systemd/system/permit-app-backend.service
+[Unit]
+Description=Permit App Backend API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/permit-app/permit-app-backend
+EnvironmentFile=/opt/permit-app/permit-app-backend/.env
+ExecStart=/opt/permit-app/permit-app-backend/bin/permit-app-backend
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+
+# Hardening (opsional; kalau mengganggu akses file, hapus perlahan)
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/permit-app/permit-app-backend
+# SystemCallFilter=@system-service   # aktifkan jika sudah yakin
+
+[Install]
+WantedBy=multi-user.target

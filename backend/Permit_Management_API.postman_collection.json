@@ -1,0 +1,345 @@
+{
+  "info": {
+    "name": "Permit Management System API",
+    "description": "Collection for testing Permit Management System endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Division",
+      "item": [
+        {
+          "name": "Create Division",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"IT\",\n  \"name\": \"Information Technology\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/divisions",
+              "host": ["{{base_url}}"],
+              "path": ["divisions"]
+            }
+          }
+        },
+        {
+          "name": "Get All Divisions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/divisions?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["divisions"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "code",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "name",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Division by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/divisions/1",
+              "host": ["{{base_url}}"],
+              "path": ["divisions", "1"]
+            }
+          }
+        },
+        {
+          "name": "Update Division",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"IT-DEPT\",\n  \"name\": \"IT Department\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/divisions/1",
+              "host": ["{{base_url}}"],
+              "path": ["divisions", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Division",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/divisions/1",
+              "host": ["{{base_url}}"],
+              "path": ["divisions", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Permit Type",
+      "item": [
+        {
+          "name": "Create Permit Type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"division_id\": 1,\n  \"category\": \"Operational\",\n  \"name\": \"Building Permit\",\n  \"risk_point\": \"High\",\n  \"default_application_type\": \"New Application\",\n  \"default_validity_period\": \"1 year\",\n  \"notes\": \"Required for construction activities\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/permit-types",
+              "host": ["{{base_url}}"],
+              "path": ["permit-types"]
+            }
+          }
+        },
+        {
+          "name": "Get All Permit Types",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/permit-types?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["permit-types"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "division_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "category",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "name",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Permit Type by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/permit-types/1",
+              "host": ["{{base_url}}"],
+              "path": ["permit-types", "1"]
+            }
+          }
+        },
+        {
+          "name": "Update Permit Type",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"division_id\": 1,\n  \"category\": \"Operational\",\n  \"name\": \"Building Construction Permit\",\n  \"risk_point\": \"Very High\",\n  \"default_application_type\": \"New Application\",\n  \"default_validity_period\": \"2 years\",\n  \"notes\": \"Required for all construction activities\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/permit-types/1",
+              "host": ["{{base_url}}"],
+              "path": ["permit-types", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Permit Type",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/permit-types/1",
+              "host": ["{{base_url}}"],
+              "path": ["permit-types", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Permit",
+      "item": [
+        {
+          "name": "Create Permit",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permit_type_id\": 1,\n  \"application_type\": \"New Application\",\n  \"permit_no\": \"PRM-2025-001\",\n  \"effective_date\": \"2025-01-01T00:00:00Z\",\n  \"expiry_date\": \"2026-01-01T00:00:00Z\",\n  \"effective_term\": \"1 year\",\n  \"responsible_person\": \"John Doe\",\n  \"doc_name\": \"Building Construction Permit\",\n  \"doc_number\": \"DOC-2025-001\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/permits",
+              "host": ["{{base_url}}"],
+              "path": ["permits"]
+            }
+          }
+        },
+        {
+          "name": "Get All Permits",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/permits?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["permits"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "permit_type_id",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "application_type",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "permit_no",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "responsible_person",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Permit by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/permits/1",
+              "host": ["{{base_url}}"],
+              "path": ["permits", "1"]
+            }
+          }
+        },
+        {
+          "name": "Update Permit",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permit_type_id\": 1,\n  \"application_type\": \"Renewal\",\n  \"permit_no\": \"PRM-2025-001-R1\",\n  \"effective_date\": \"2026-01-01T00:00:00Z\",\n  \"expiry_date\": \"2027-01-01T00:00:00Z\",\n  \"effective_term\": \"1 year\",\n  \"responsible_person\": \"John Doe\",\n  \"doc_name\": \"Building Construction Permit - Renewal\",\n  \"doc_number\": \"DOC-2026-001\",\n  \"status\": \"active\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/permits/1",
+              "host": ["{{base_url}}"],
+              "path": ["permits", "1"]
+            }
+          }
+        },
+        {
+          "name": "Delete Permit",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/permits/1",
+              "host": ["{{base_url}}"],
+              "path": ["permits", "1"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
