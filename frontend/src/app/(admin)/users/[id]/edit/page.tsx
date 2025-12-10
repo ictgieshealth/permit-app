@@ -6,7 +6,7 @@ import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import Link from "next/link";
 import { Role } from "@/types/role";
-import { Domain } from "domain";
+import { Domain } from "@/types/domain";
 import { authService } from "@/services/auth.service";
 import { userService } from "@/services/user.service";
 import { roleService } from "@/services/role.service";

@@ -27,6 +27,9 @@ export default function EditPermitPage() {
   const [error, setError] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [currentPermit, setCurrentPermit] = useState<Permit | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [newFilePreview, setNewFilePreview] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [permitTypes, setPermitTypes] = useState<PermitType[]>([]);

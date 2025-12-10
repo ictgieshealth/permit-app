@@ -6,7 +6,7 @@ import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { authService } from "@/services/auth.service";
 import { useRouter } from "next/navigation";
-import type { User } from "@/types/api";
+import type { User } from "@/types/user";
 
 export default function UserDropdown() {
   const router = useRouter();

@@ -7,9 +7,9 @@ Wants=network-online.target
 [Service]
 User=root
 Group=root
-WorkingDirectory=/opt/permit-app/permit-app-backend
-EnvironmentFile=/opt/permit-app/permit-app-backend/.env
-ExecStart=/opt/permit-app/permit-app-backend/bin/permit-app-backend
+WorkingDirectory=/opt/permit-app/backend
+EnvironmentFile=/opt/permit-app/backend/.env
+ExecStart=/opt/permit-app/backend/bin/permit-app-backend
 Restart=always
 RestartSec=2
 LimitNOFILE=65536
@@ -19,7 +19,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/permit-app/permit-app-backend
+ReadWritePaths=/opt/permit-app/backend
 # SystemCallFilter=@system-service   # aktifkan jika sudah yakin
 
 [Install]
