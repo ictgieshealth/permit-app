@@ -6,16 +6,12 @@ import { Dropdown } from "../ui/dropdown/Dropdown";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { authService } from "@/services/auth.service";
 import { useRouter } from "next/navigation";
-import type { User } from "@/types/user";
+import { useAuth } from "@/context/AuthContext";
 
 export default function UserDropdown() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    setUser(authService.getStoredUser());
-  }, []);
+  const { user, currentRole } = useAuth();
 
   function toggleDropdown(e: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
     e.stopPropagation();
@@ -81,9 +77,9 @@ export default function UserDropdown() {
           <span className="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">
             {user?.email || "user@example.com"}
           </span>
-          {user?.role && (
+          {currentRole && (
             <span className="inline-block px-2 py-0.5 mt-1 text-xs font-medium rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400">
-              {user.role.name}
+              {currentRole.name}
             </span>
           )}
         </div>

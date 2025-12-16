@@ -1,5 +1,5 @@
 import { Domain } from "./domain";
-import { Reference } from "./reference";
+import { Reference } from "./task";
 import { User } from "./user";
 
 export interface Project {

@@ -5,7 +5,7 @@ import Image from "next/image";
 
 
 export default function UserMetaCard() {
-  const { user } = useAuth();
+  const { user, currentRole } = useAuth();
 
   if (!user) {
     return (
@@ -37,7 +37,7 @@ export default function UserMetaCard() {
               </h4>
               <div className="flex flex-col items-center gap-1 text-center xl:flex-row xl:gap-3 xl:text-left">
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {user.role?.name || "User"}
+                  {currentRole?.name || "User"}
                 </p>
                 {user.email && (
                   <>
@@ -50,14 +50,14 @@ export default function UserMetaCard() {
               </div>
             </div>
             <div className="flex items-center order-2 gap-2 grow xl:order-3 xl:justify-end">
-              {user.domains && user.domains.length > 0 && (
+              {user.domain_roles && user.domain_roles.length > 0 && (
                 <div className="flex flex-wrap gap-2">
-                  {user.domains.map((domain) => (
+                  {user.domain_roles.map((domainRole) => (
                     <span
-                      key={domain.id}
+                      key={domainRole.domain_id}
                       className="inline-block px-3 py-1.5 text-xs font-medium rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
                     >
-                      {domain.name}
+                      {domainRole.domain?.name}
                     </span>
                   ))}
                 </div>

@@ -9,7 +9,7 @@ import { Modal } from "../ui/modal";
 import { useModal } from "../../hooks/useModal";
 
 export default function ProfileInfoCard() {
-  const { user, refreshUser } = useAuth();
+  const { user, currentRole, refreshUser } = useAuth();
   const { isOpen, openModal, closeModal } = useModal();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -124,7 +124,7 @@ export default function ProfileInfoCard() {
                 Role
               </p>
               <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                {user.role?.name || "-"}
+                {currentRole?.name || "-"}
               </p>
             </div>
           </div>
