@@ -380,7 +380,7 @@ export default function TasksPage() {
         message={`Are you sure you want to delete task "${deleteModal.taskCode}"? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
-        isLoading={deleting}
+        loading={deleting}
       />
     </div>
   );
