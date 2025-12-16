@@ -33,7 +33,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     // Check if user is admin
-    if (!authService.hasRole(["admin"])) {
+    if (!authService.hasRole(["ADMIN"])) {
       router.push("/");
       return;
     }
@@ -200,8 +200,7 @@ export default function UsersPage() {
                 <th className="px-6 py-3">Username</th>
                 <th className="px-6 py-3">Full Name</th>
                 <th className="px-6 py-3">Email</th>
-                <th className="px-6 py-3">Role</th>
-                <th className="px-6 py-3">Domains</th>
+                <th className="px-6 py-3">Domain & Role Assignments</th>
                 <th className="px-6 py-3">Status</th>
                 <th className="px-6 py-3">Actions</th>
               </tr>
@@ -209,13 +208,13 @@ export default function UsersPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     Loading...
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     No users found
                   </td>
                 </tr>
@@ -235,23 +234,20 @@ export default function UsersPage() {
                       {user.email}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400">
-                        {user.role?.name || "N/A"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
                       <div className="flex flex-wrap gap-1">
-                        {user.domains && user.domains.length > 0 ? (
-                          user.domains.map((domain) => (
+                        {user.domain_roles && user.domain_roles.length > 0 ? (
+                          user.domain_roles.map((dr) => (
                             <span
-                              key={domain.id}
+                              key={`${dr.domain_id}-${dr.role_id}`}
                               className="inline-block px-2 py-0.5 text-xs rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300"
+                              title={`${dr.domain?.name} - ${dr.role?.name}${dr.is_default ? ' (Default)' : ''}`}
                             >
-                              {domain.code}
+                              {dr.domain?.code || `D${dr.domain_id}`}: {dr.role?.code || `R${dr.role_id}`}
+                              {dr.is_default && ' ⭐'}
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-gray-500">No domains</span>
+                          <span className="text-xs text-gray-500">No assignments</span>
                         )}
                       </div>
                     </td>

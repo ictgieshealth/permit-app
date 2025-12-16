@@ -31,6 +31,18 @@ func (c *DivisionController) Create(ctx *gin.Context) {
 		return
 	}
 
+	// Validate domain_id from JWT token
+	domainID, exists := ctx.Get("domain_id")
+	if !exists || domainID == nil {
+		apiresponse.Error(ctx, http.StatusUnauthorized, "UNAUTHORIZED", "Domain context not found", nil, nil)
+		return
+	}
+	
+	if req.DomainID != domainID.(int64) {
+		apiresponse.Error(ctx, http.StatusForbidden, "FORBIDDEN", "Cannot create division in different domain", nil, nil)
+		return
+	}
+
 	division, err := c.service.CreateDivision(&req)
 	if err != nil {
 		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to create division", err, nil)
@@ -68,6 +80,12 @@ func (c *DivisionController) GetAll(ctx *gin.Context) {
 		return
 	}
 
+	// Extract domain_id from JWT token context
+	if domainID, exists := ctx.Get("domain_id"); exists && domainID != nil {
+		did := domainID.(int64)
+		filter.DomainID = &did
+	}
+
 	divisions, total, err := c.service.GetAllDivisions(&filter)
 	if err != nil {
 		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to retrieve divisions", err, nil)
@@ -98,6 +116,20 @@ func (c *DivisionController) Update(ctx *gin.Context) {
 	if err := validator.New().Struct(&req); err != nil {
 		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Validation failed", err, nil)
 		return
+	}
+
+	// Validate domain_id from JWT token (only if domain_id is provided in request)
+	if req.DomainID != 0 {
+		domainID, exists := ctx.Get("domain_id")
+		if !exists || domainID == nil {
+			apiresponse.Error(ctx, http.StatusUnauthorized, "UNAUTHORIZED", "Domain context not found", nil, nil)
+			return
+		}
+		
+		if req.DomainID != domainID.(int64) {
+			apiresponse.Error(ctx, http.StatusForbidden, "FORBIDDEN", "Cannot update division in different domain", nil, nil)
+			return
+		}
 	}
 
 	division, err := c.service.UpdateDivision(id, &req)

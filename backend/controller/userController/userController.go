@@ -41,6 +41,34 @@ func (c *UserController) Login(ctx *gin.Context) {
 	apiresponse.OK(ctx, response, "Login successful", nil)
 }
 
+// SwitchDomain switches the user's current domain context and returns a new token
+func (c *UserController) SwitchDomain(ctx *gin.Context) {
+	userID, exists := ctx.Get("user_id")
+	if !exists {
+		apiresponse.Error(ctx, http.StatusUnauthorized, "UNAUTHORIZED", "User ID not found in token", nil, nil)
+		return
+	}
+
+	var req model.SwitchDomainRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid request body", err, nil)
+		return
+	}
+
+	if err := validator.New().Struct(&req); err != nil {
+		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Validation failed", err, nil)
+		return
+	}
+
+	response, err := c.service.SwitchDomain(userID.(int64), &req)
+	if err != nil {
+		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to switch domain", err, nil)
+		return
+	}
+
+	apiresponse.OK(ctx, response, "Domain switched successfully", nil)
+}
+
 // GetProfile returns the profile of the currently logged-in user
 func (c *UserController) GetProfile(ctx *gin.Context) {
 	userID, exists := ctx.Get("user_id")
@@ -138,6 +166,12 @@ func (c *UserController) GetAll(ctx *gin.Context) {
 		return
 	}
 
+	// Extract domain_id from JWT token context
+	if domainID, exists := ctx.Get("domain_id"); exists && domainID != nil {
+		did := domainID.(int64)
+		filter.DomainID = &did
+	}
+
 	users, total, err := c.service.GetAllUsers(&filter)
 	if err != nil {
 		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to retrieve users", err, nil)
@@ -227,15 +261,15 @@ func (c *UserController) Delete(ctx *gin.Context) {
 	apiresponse.OK(ctx, EmptyData{}, "User deleted successfully", nil)
 }
 
-// AddDomain adds a domain to a user
-func (c *UserController) AddDomain(ctx *gin.Context) {
+// AddDomainRole adds a domain and role to a user
+func (c *UserController) AddDomainRole(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid ID", err, nil)
 		return
 	}
 
-	var req model.UserDomainRequest
+	var req model.UserDomainRoleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid request body", err, nil)
 		return
@@ -246,18 +280,18 @@ func (c *UserController) AddDomain(ctx *gin.Context) {
 		return
 	}
 
-	err = c.service.AddUserDomain(id, req.DomainID, req.IsDefault)
+	err = c.service.AddUserDomainRole(id, req.DomainID, req.RoleID, req.IsDefault)
 	if err != nil {
-		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to add domain to user", err, nil)
+		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to add domain-role to user", err, nil)
 		return
 	}
 
 	type EmptyData struct{}
-	apiresponse.OK(ctx, EmptyData{}, "Domain added to user successfully", nil)
+	apiresponse.OK(ctx, EmptyData{}, "Domain-role added to user successfully", nil)
 }
 
-// RemoveDomain removes a domain from a user
-func (c *UserController) RemoveDomain(ctx *gin.Context) {
+// RemoveDomainRole removes a domain and role from a user
+func (c *UserController) RemoveDomainRole(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid ID", err, nil)
@@ -270,18 +304,24 @@ func (c *UserController) RemoveDomain(ctx *gin.Context) {
 		return
 	}
 
-	err = c.service.RemoveUserDomain(id, domainID)
+	roleID, err := strconv.ParseInt(ctx.Param("role_id"), 10, 64)
 	if err != nil {
-		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to remove domain from user", err, nil)
+		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid role ID", err, nil)
+		return
+	}
+
+	err = c.service.RemoveUserDomainRole(id, domainID, roleID)
+	if err != nil {
+		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to remove domain-role from user", err, nil)
 		return
 	}
 
 	type EmptyData struct{}
-	apiresponse.OK(ctx, EmptyData{}, "Domain removed from user successfully", nil)
+	apiresponse.OK(ctx, EmptyData{}, "Domain-role removed from user successfully", nil)
 }
 
-// SetDefaultDomain sets the default domain for a user
-func (c *UserController) SetDefaultDomain(ctx *gin.Context) {
+// SetDefaultDomainRole sets the default domain-role for a user
+func (c *UserController) SetDefaultDomainRole(ctx *gin.Context) {
 	id, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
 		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid ID", err, nil)
@@ -294,12 +334,18 @@ func (c *UserController) SetDefaultDomain(ctx *gin.Context) {
 		return
 	}
 
-	err = c.service.SetDefaultDomain(id, domainID)
+	roleID, err := strconv.ParseInt(ctx.Param("role_id"), 10, 64)
 	if err != nil {
-		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to set default domain", err, nil)
+		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid role ID", err, nil)
+		return
+	}
+
+	err = c.service.SetDefaultDomainRole(id, domainID, roleID)
+	if err != nil {
+		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to set default domain-role", err, nil)
 		return
 	}
 
 	type EmptyData struct{}
-	apiresponse.OK(ctx, EmptyData{}, "Default domain set successfully", nil)
+	apiresponse.OK(ctx, EmptyData{}, "Default domain-role set successfully", nil)
 }

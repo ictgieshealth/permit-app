@@ -3,13 +3,24 @@
 -- Updated: 2025-12-03 - Added domains table
 -- Updated: 2025-12-06 - Added roles and users table
 -- Updated: 2025-12-08 - Added menus and menu_roles tables
+-- Updated: 2025-12-15 - Restructured user-role-domain for multi-app support
 
 -- Drop tables if exists (for clean migration)
+DROP TABLE IF EXISTS approval_tasks CASCADE;
+DROP TABLE IF EXISTS task_files CASCADE;
+DROP TABLE IF EXISTS tasks CASCADE;
+DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS permits CASCADE;
 DROP TABLE IF EXISTS permit_types CASCADE;
 DROP TABLE IF EXISTS divisions CASCADE;
+DROP TABLE IF EXISTS user_domain_projects CASCADE;
+DROP TABLE IF EXISTS projects CASCADE;
+DROP TABLE IF EXISTS "references" CASCADE;
+DROP TABLE IF EXISTS reference_categories CASCADE;
+DROP TABLE IF EXISTS modules CASCADE;
 DROP TABLE IF EXISTS menu_roles CASCADE;
 DROP TABLE IF EXISTS menus CASCADE;
+DROP TABLE IF EXISTS user_domain_roles CASCADE;
 DROP TABLE IF EXISTS user_domains CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS roles CASCADE;
@@ -26,39 +37,77 @@ CREATE TABLE domains (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create Roles table
-CREATE TABLE roles (
+-- Create Modules table for categorizing reference data
+CREATE TABLE modules (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(50) UNIQUE NOT NULL,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create Users table
+-- Create Reference Categories table
+CREATE TABLE reference_categories (
+    id BIGSERIAL PRIMARY KEY,
+    module_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (module_id) REFERENCES modules(id) ON DELETE RESTRICT
+);
+
+-- Create References table
+CREATE TABLE "references" (
+    id BIGSERIAL PRIMARY KEY,
+    reference_category_id BIGINT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (reference_category_id) REFERENCES reference_categories(id) ON DELETE CASCADE
+);
+
+-- Create Roles table with category for multi-app support
+CREATE TABLE roles (
+    id BIGSERIAL PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    category VARCHAR(50) NOT NULL, -- 'Permit' or 'Ticketing'
+    description TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create Users table (without role_id)
 CREATE TABLE users (
     id BIGSERIAL PRIMARY KEY,
-    role_id BIGINT NOT NULL,
     username VARCHAR(100) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT true,
+    phone_number VARCHAR(20),
+    nip VARCHAR(50),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create User-Domain junction table (many-to-many relationship)
-CREATE TABLE user_domains (
+-- Create User-Domain-Role junction table (replaces user_domains)
+-- Users can have different roles in different domains
+CREATE TABLE user_domain_roles (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
     domain_id BIGINT NOT NULL,
+    role_id BIGINT NOT NULL,
     is_default BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
-    UNIQUE(user_id, domain_id)
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
+    UNIQUE(user_id, domain_id, role_id)
 );
 
 -- Create Menus table for dynamic menu management
@@ -103,6 +152,7 @@ CREATE TABLE divisions (
 CREATE TABLE permit_types (
     id BIGSERIAL PRIMARY KEY,
     division_id BIGINT,
+    code VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
     risk_point VARCHAR(50),
     default_application_type VARCHAR(100),
@@ -144,17 +194,175 @@ CREATE TABLE permits (
     UNIQUE(domain_id, permit_no)
 );
 
+CREATE TABLE IF NOT EXISTS notifications (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    permit_id BIGINT NOT NULL,
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    read_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_permit FOREIGN KEY (permit_id) REFERENCES permits(id) ON DELETE CASCADE
+);
+-- Create Projects table
+CREATE TABLE projects (
+    id BIGSERIAL PRIMARY KEY,
+    domain_id BIGINT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    code VARCHAR(100) NOT NULL,
+    description TEXT,
+    status BOOLEAN DEFAULT true,
+    project_status_id BIGINT NOT NULL,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE RESTRICT,
+    FOREIGN KEY (project_status_id) REFERENCES "references"(id) ON DELETE RESTRICT,
+    UNIQUE(domain_id, code)
+);
+
+-- Create User-Domain-Project junction table
+-- Users can be assigned to projects within specific domains
+CREATE TABLE user_domain_projects (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    domain_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    UNIQUE(user_id, domain_id, project_id)
+);
+
+-- Create Tasks table for task management module
+CREATE TABLE tasks (
+    id BIGSERIAL PRIMARY KEY,
+    domain_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    code VARCHAR(50) NOT NULL UNIQUE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    description_before TEXT,
+    description_after TEXT,
+    reason TEXT,
+    revision TEXT,
+    status BOOLEAN DEFAULT true,
+    status_id BIGINT,
+    priority_id BIGINT,
+    type_id BIGINT,
+    stack_id BIGINT,
+    assigned_id BIGINT,
+    created_by BIGINT NOT NULL,
+    updated_by BIGINT,
+    approved_by BIGINT,
+    completed_by BIGINT,
+    done_by BIGINT,
+    approval_status_id BIGINT,
+    start_date TIMESTAMP WITH TIME ZONE,
+    due_date TIMESTAMP WITH TIME ZONE,
+    completed_date TIMESTAMP WITH TIME ZONE,
+    approval_date TIMESTAMP WITH TIME ZONE,
+    done_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE RESTRICT,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    FOREIGN KEY (status_id) REFERENCES "references"(id) ON DELETE SET NULL,
+    FOREIGN KEY (priority_id) REFERENCES "references"(id) ON DELETE SET NULL,
+    FOREIGN KEY (type_id) REFERENCES "references"(id) ON DELETE SET NULL,
+    FOREIGN KEY (stack_id) REFERENCES "references"(id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT,
+    FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (completed_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (done_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (approval_status_id) REFERENCES "references"(id) ON DELETE SET NULL,
+    UNIQUE(domain_id, code)
+);
+
+-- Create Task Files table for task attachments
+CREATE TABLE task_files (
+    id BIGSERIAL PRIMARY KEY,
+    task_id BIGINT NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size VARCHAR(50),
+    file_type VARCHAR(100),
+    task_file_type INT,
+    status BOOLEAN DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+-- Create Approval Tasks table for task approval workflow
+CREATE TABLE approval_tasks (
+    id BIGSERIAL PRIMARY KEY,
+    task_id BIGINT NOT NULL,
+    sequence SMALLINT NOT NULL,
+    approved_by BIGINT,
+    approval_status_id BIGINT,
+    approval_date TIMESTAMP WITH TIME ZONE,
+    note VARCHAR(500),
+    status BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (approval_status_id) REFERENCES "references"(id) ON DELETE SET NULL,
+    UNIQUE(task_id, sequence)
+);
+
 -- Create indexes for better query performance
 CREATE INDEX idx_domains_code ON domains(code);
 CREATE INDEX idx_domains_is_active ON domains(is_active);
+CREATE INDEX idx_modules_code ON modules(code);
+CREATE INDEX idx_modules_is_active ON modules(is_active);
+CREATE INDEX idx_reference_categories_module_id ON reference_categories(module_id);
+CREATE INDEX idx_reference_categories_is_active ON reference_categories(is_active);
+CREATE INDEX idx_references_reference_category_id ON "references"(reference_category_id);
+CREATE INDEX idx_references_is_active ON "references"(is_active);
+CREATE INDEX idx_roles_code ON roles(code);
 CREATE INDEX idx_roles_name ON roles(name);
-CREATE INDEX idx_users_role_id ON users(role_id);
+CREATE INDEX idx_roles_category ON roles(category);
+CREATE INDEX idx_user_domain_projects_user_id ON user_domain_projects(user_id);
+CREATE INDEX idx_user_domain_projects_domain_id ON user_domain_projects(domain_id);
+CREATE INDEX idx_user_domain_projects_project_id ON user_domain_projects(project_id);
+CREATE INDEX idx_tasks_domain_id ON tasks(domain_id);
+CREATE INDEX idx_tasks_project_id ON tasks(project_id);
+CREATE INDEX idx_tasks_code ON tasks(code);
+CREATE INDEX idx_tasks_status_id ON tasks(status_id);
+CREATE INDEX idx_tasks_priority_id ON tasks(priority_id);
+CREATE INDEX idx_tasks_type_id ON tasks(type_id);
+CREATE INDEX idx_tasks_assigned_id ON tasks(assigned_id);
+CREATE INDEX idx_tasks_created_by ON tasks(created_by);
+CREATE INDEX idx_tasks_approval_status_id ON tasks(approval_status_id);
+CREATE INDEX idx_tasks_deleted_at ON tasks(deleted_at);
+CREATE INDEX idx_task_files_task_id ON task_files(task_id);
+CREATE INDEX idx_task_files_task_file_type ON task_files(task_file_type);
+CREATE INDEX idx_approval_tasks_task_id ON approval_tasks(task_id);
+CREATE INDEX idx_approval_tasks_approved_by ON approval_tasks(approved_by);
+CREATE INDEX idx_approval_tasks_approval_status_id ON approval_tasks(approval_status_id);
+CREATE INDEX idx_approval_tasks_sequence ON approval_tasks(sequence);
 CREATE INDEX idx_users_username ON users(username);
+CREATE INDEX idx_projects_domain_id ON projects(domain_id);
+CREATE INDEX idx_projects_code ON projects(code);
+CREATE INDEX idx_projects_project_status_id ON projects(project_status_id);
+CREATE INDEX idx_projects_status ON projects(status);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_is_active ON users(is_active);
-CREATE INDEX idx_user_domains_user_id ON user_domains(user_id);
-CREATE INDEX idx_user_domains_domain_id ON user_domains(domain_id);
-CREATE INDEX idx_user_domains_is_default ON user_domains(is_default);
+CREATE INDEX idx_user_domain_roles_user_id ON user_domain_roles(user_id);
+CREATE INDEX idx_user_domain_roles_domain_id ON user_domain_roles(domain_id);
+CREATE INDEX idx_user_domain_roles_role_id ON user_domain_roles(role_id);
+CREATE INDEX idx_user_domain_roles_is_default ON user_domain_roles(is_default);
 CREATE INDEX idx_menus_parent_id ON menus(parent_id);
 CREATE INDEX idx_menus_is_active ON menus(is_active);
 CREATE INDEX idx_menus_order_index ON menus(order_index);
@@ -165,6 +373,7 @@ CREATE INDEX idx_divisions_domain_id ON divisions(domain_id);
 CREATE INDEX idx_divisions_code ON divisions(code);
 CREATE INDEX idx_permit_types_division_id ON permit_types(division_id);
 CREATE INDEX idx_permit_types_name ON permit_types(name);
+CREATE INDEX idx_permit_types_code ON permit_types(code);
 CREATE INDEX idx_permits_domain_id ON permits(domain_id);
 CREATE INDEX idx_permits_division_id ON permits(division_id);
 CREATE INDEX idx_permits_permit_type_id ON permits(permit_type_id);
@@ -175,64 +384,146 @@ CREATE INDEX idx_permits_responsible_doc_person_id ON permits(responsible_doc_pe
 CREATE INDEX idx_permits_status ON permits(status);
 CREATE INDEX idx_permits_effective_date ON permits(effective_date);
 CREATE INDEX idx_permits_expiry_date ON permits(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_permit_id ON notifications(permit_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
 
 -- Insert sample data (optional)
 
 -- Sample Domains
 INSERT INTO domains (code, name, description, is_active) VALUES
-('COMPANY_A', 'Company A', 'First company using the system', true),
-('COMPANY_B', 'Company B', 'Second company using the system', true),
-('COMPANY_C', 'Company C', 'Third company using the system', false);
+('RS-TRIADIPA', 'RS TRIADIPA', 'RS TRIADIPA', true),
+('RS-BHC-SUMENEP', 'RS BHC SUMENEP', 'RS BHC SUMENEP', true);
 
--- Sample Roles
-INSERT INTO roles (name) VALUES
-('admin'),
-('manager'),
-('employee'),
-('viewer');
+-- Sample Modules
+INSERT INTO modules (code, name, is_active) VALUES
+('task', 'Task Management', true),
+('project', 'Project Management', true),
+('permit', 'Permit Management', true);
+
+-- Sample Reference Categories
+INSERT INTO reference_categories (id, module_id, name, is_active) VALUES
+(1, 1, 'Task Status', true),
+(2, 1, 'Task Priority', true),
+(3, 1, 'Task Type', true),
+(4, 1, 'Task Stack', true),
+(5, 1, 'Task Approval Status', true),
+(6, 2, 'Project Status', true),
+(7, 1, 'Task File Type', true);
+
+-- Sample References for Task Management
+INSERT INTO "references" (id, reference_category_id, name, is_active) VALUES
+-- Task Status (category_id = 1)
+(1, 1, 'To Do', true),
+(2, 1, 'On Hold', true),
+(3, 1, 'On Progress', true),
+(4, 1, 'Done', true),
+(37, 1, 'In Review', true),
+(39, 1, 'Revision', true),
+-- Task Priority (category_id = 2)
+(5, 2, 'Low', true),
+(6, 2, 'Medium', true),
+(7, 2, 'High', true),
+-- Task Type (category_id = 3)
+(24, 3, 'Maintenance', true),
+(25, 3, 'Development', true),
+-- Task Stack (category_id = 4)
+(12, 4, 'BE', true),
+(13, 4, 'Web', true),
+(14, 4, 'Mobile - Console', true),
+(15, 4, 'Mobile - User', true),
+(16, 4, 'Dev - Ops', true),
+-- Task Approval Status (category_id = 5)
+(20, 5, 'Waiting', true),
+(21, 5, 'Reject', true),
+(22, 5, 'Approve', true),
+(23, 5, 'Pending Manager', true),
+-- Project Status (category_id = 6)
+(26, 6, 'Pending', true),
+(27, 6, 'On Hold', true),
+(28, 6, 'On Progress', true),
+(29, 6, 'Done', true),
+-- Task File Type (category_id = 7)
+(30, 7, 'Create', true),
+(31, 7, 'Before', true),
+(32, 7, 'After', true),
+(38, 7, 'File Revision', true);
+
+-- Sample Roles with category (Permit and Ticketing)
+INSERT INTO roles (code, name, category, description) VALUES
+-- Permit roles
+('ADMIN', 'Admin', 'Permit', 'System administrator with full access to permit management'),
+('PERMIT_MANAGER', 'Permit Manager', 'Permit', 'Manager for permit operations'),
+('PERMIT_EMPLOYEE', 'Permit Employee', 'Permit', 'Employee handling permit tasks'),
+-- Ticketing roles
+('TICKETING_DEVELOPER', 'Ticketing Developer', 'Ticketing', 'Developer for ticketing system'),
+('TICKETING_PIC', 'Ticketing PIC', 'Ticketing', 'Client PIC handling ticketing tasks'),
+('TICKETING_MANAGER', 'Ticketing Manager', 'Ticketing', 'Client Manager for ticketing operations'),
+('TICKETING_HEAD_OF_UNIT', 'Ticketing Head of Unit', 'Ticketing', 'Client Head of Unit for ticketing system');
 
 -- Sample Users (password: "password123" hashed with bcrypt cost 10)
-INSERT INTO users (role_id, username, email, password, full_name, is_active) VALUES
-(1, 'admin', 'admin@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'System Administrator', true),
-(2, 'manager1', 'manager1@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Manager One', true),
-(3, 'employee1', 'employee1@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Employee One', true),
-(1, 'admin2', 'admin2@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Administrator Two', true);
+INSERT INTO users (username, email, password, full_name, is_active) VALUES
+('admin', 'admin@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'System Administrator', true),
+('manager1', 'manager1@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Permit Manager One', true),
+('employee1', 'employee1@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Permit Employee One', true),
+('ticketing_dev', 'ticketing.dev@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Ticketing Developer', true),
+('ticketing_manager', 'ticketing.manager@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Ticketing Manager One', true);
 
--- Sample User-Domain relationships (users can have multiple domains)
-INSERT INTO user_domains (user_id, domain_id, is_default) VALUES
-(1, 1, true),   -- admin has access to COMPANY_A (default)
-(1, 2, false),  -- admin also has access to COMPANY_B
-(2, 1, true),   -- manager1 has access to COMPANY_A
-(3, 1, true),   -- employee1 has access to COMPANY_A
-(3, 2, false),  -- employee1 also has access to COMPANY_B
-(4, 2, true);   -- admin2 has access to COMPANY_B
+-- Sample User-Domain-Role relationships (users can have different roles in different domains)
+INSERT INTO user_domain_roles (user_id, domain_id, role_id, is_default) VALUES
+-- Admin has Admin role in COMPANY_A (default) and COMPANY_B
+(1, 1, 1, true),   -- admin -> COMPANY_A -> Admin (default)
+(1, 2, 1, false),  -- admin -> COMPANY_B -> Admin
+-- Permit Manager has Permit Manager role in COMPANY_A
+(2, 1, 2, true),   -- manager1 -> COMPANY_A -> Permit Manager
+-- Permit Employee has Permit Employee role in COMPANY_A and COMPANY_B
+(3, 1, 3, true),   -- employee1 -> COMPANY_A -> Permit Employee (default)
+(3, 2, 3, false),  -- employee1 -> COMPANY_B -> Permit Employee
+-- Ticketing Developer has Ticketing Developer role in COMPANY_B
+(4, 2, 6, true),   -- ticketing_dev -> COMPANY_B -> Ticketing Developer
+-- Ticketing Manager has Ticketing Manager role in COMPANY_A and COMPANY_B
+(5, 1, 5, true),   -- ticketing_manager -> COMPANY_A -> Ticketing Manager (default)
+(5, 2, 5, false);  -- ticketing_manager -> COMPANY_B -> Ticketing Manager
 
 -- Sample Menus
 INSERT INTO menus (name, path, icon, parent_id, order_index, is_active) VALUES
 ('Dashboard', '/', 'GridIcon', NULL, 1, true),
 ('Permits', '/permits', 'ListIcon', NULL, 2, true),
-('Domains', '/domains', 'PageIcon', NULL, 3, true),
-('Divisions', '/divisions', 'BoxCubeIcon', NULL, 4, true),
-('Permit Types', '/permit-types', 'TableIcon', NULL, 5, true),
-('Users', '/users', 'UserCircleIcon', NULL, 6, true),
-('Menus', '/menus', 'PlugInIcon', NULL, 7, true);
+('Tasks', '/tasks', 'ListIcon', NULL, 3, true),
+('Task Requests', '/tasks/task-requests', 'PageIcon', NULL, 4, true),
+('Projects', '/projects', 'PageIcon', NULL, 5, true),
+('Domains', '/domains', 'PageIcon', NULL, 6, true),
+('Divisions', '/divisions', 'BoxCubeIcon', NULL, 7, true),
+('Permit Types', '/permit-types', 'TableIcon', NULL, 8, true),
+('Roles', '/roles', 'UserCircleIcon', NULL, 9, true),
+('Users', '/users', 'UserCircleIcon', NULL, 10, true),
+('Menus', '/menus', 'PlugInIcon', NULL, 11, true);
 
 -- Assign all menus to admin role (role_id = 1)
 INSERT INTO menu_roles (menu_id, role_id) VALUES
 (1, 1), -- Dashboard -> Admin
 (2, 1), -- Permits -> Admin
-(3, 1), -- Domains -> Admin
-(4, 1), -- Divisions -> Admin
-(5, 1), -- Permit Types -> Admin
-(6, 1), -- Users -> Admin
-(7, 1); -- Menus -> Admin
+(3, 1), -- Tasks -> Admin
+(4, 1), -- Task Requests -> Admin
+(5, 1), -- Projects -> Admin
+(6, 1), -- Domains -> Admin
+(7, 1), -- Divisions -> Admin
+(8, 1), -- Permit Types -> Admin
+(9, 1), -- Roles -> Admin
+(10, 1), -- Users -> Admin
+(11, 1); -- Menus -> Admin
 
 -- Assign limited menus to manager role (role_id = 2)
 INSERT INTO menu_roles (menu_id, role_id) VALUES
 (1, 2), -- Dashboard -> Manager
 (2, 2), -- Permits -> Manager
-(4, 2), -- Divisions -> Manager
-(5, 2); -- Permit Types -> Manager
+(3, 2), -- Tasks -> Manager
+(4, 2), -- Task Requests -> Manager
+(5, 2), -- Projects -> Manager
+(7, 2), -- Divisions -> Manager
+(8, 2); -- Permit Types -> Manager
 
 -- Assign basic menus to employee role (role_id = 3)
 INSERT INTO menu_roles (menu_id, role_id) VALUES
@@ -248,12 +539,32 @@ INSERT INTO divisions (domain_id, code, name) VALUES
 (2, 'SALES', 'Sales and Marketing');
 
 -- Sample Permit Types
-INSERT INTO permit_types (division_id, name, risk_point, default_application_type, default_validity_period, notes) VALUES
-(1, 'Facility', 'High', 'New Application', '1 year', 'Permit for facility and infrastructure'),
-(1, 'Clinical', 'High', 'New Application', '2 years', 'Permit for clinical equipment and services'),
-(2, 'Kompetensi', 'Medium', 'New Application', '1 year', 'Competency certificates for staff'),
-(3, 'Operasional', 'High', 'New Application', '3 years', 'Operational permits for business activities'),
-(4, 'Financial', 'Low', 'New Application', '2 years', 'Financial and regulatory permits');
+INSERT INTO permit_types (division_id, code, name, risk_point, default_application_type, default_validity_period, notes) VALUES
+(1, 'FAC', 'Facility', 'High', 'New Application', '1 year', 'Permit for facility and infrastructure'),
+(1, 'CLIN', 'Clinical', 'High', 'New Application', '2 years', 'Permit for clinical equipment and services'),
+(2, 'KOMP', 'Kompetensi', 'Medium', 'New Application', '1 year', 'Competency certificates for staff'),
+(3, 'OPER', 'Operasional', 'High', 'New Application', '3 years', 'Operational permits for business activities'),
+(4, 'FIN', 'Financial', 'Low', 'New Application', '2 years', 'Financial and regulatory permits');
+-- Sample Projects (using project_status_id = 26 for 'Pending' from references)
+INSERT INTO projects (domain_id, name, code, description, status, project_status_id) VALUES
+(1, 'RS TRIA DIPA', 'rs-tria-dipa', 'Hospital Management System for RS TRIA DIPA', true, 26),
+(2, 'RS BHC SUMENEP', 'rs-bhc-sumenep', 'Hospital Management System for RS BHC SUMENEP', true, 26);
+
+-- Sample User-Domain-Project assignments
+-- Admin is assigned to both projects
+INSERT INTO user_domain_projects (user_id, domain_id, project_id) VALUES
+(1, 1, 1),  -- admin -> RS-TRIADIPA domain -> RS TRIA DIPA project
+(1, 2, 2),  -- admin -> RS-BHC-SUMENEP domain -> RS BHC SUMENEP project
+-- Permit Manager assigned to project 1
+(2, 1, 1),  -- manager1 -> RS-TRIADIPA domain -> RS TRIA DIPA project
+-- Permit Employee assigned to both projects
+(3, 1, 1),  -- employee1 -> RS-TRIADIPA domain -> RS TRIA DIPA project
+(3, 2, 2),  -- employee1 -> RS-BHC-SUMENEP domain -> RS BHC SUMENEP project
+-- Ticketing Developer assigned to project 2
+(4, 2, 2),  -- ticketing_dev -> RS-BHC-SUMENEP domain -> RS BHC SUMENEP project
+-- Ticketing Manager assigned to both projects
+(5, 1, 1),  -- ticketing_manager -> RS-TRIADIPA domain -> RS TRIA DIPA project
+(5, 2, 2);  -- ticketing_manager -> RS-BHC-SUMENEP domain -> RS BHC SUMENEP project
 
 -- Sample Permits
 INSERT INTO permits (domain_id, division_id, permit_type_id, name, application_type, permit_no, effective_date, expiry_date, effective_term, responsible_person_id, responsible_doc_person_id, doc_name, doc_number, status) VALUES
@@ -276,13 +587,22 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_domains_updated_at BEFORE UPDATE ON domains
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_modules_updated_at BEFORE UPDATE ON modules
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_reference_categories_updated_at BEFORE UPDATE ON reference_categories
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_references_updated_at BEFORE UPDATE ON "references"
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 CREATE TRIGGER update_roles_updated_at BEFORE UPDATE ON roles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_user_domains_updated_at BEFORE UPDATE ON user_domains
+CREATE TRIGGER update_user_domain_roles_updated_at BEFORE UPDATE ON user_domain_roles
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_menus_updated_at BEFORE UPDATE ON menus
@@ -300,11 +620,20 @@ CREATE TRIGGER update_permit_types_updated_at BEFORE UPDATE ON permit_types
 CREATE TRIGGER update_permits_updated_at BEFORE UPDATE ON permits
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_domain_projects_updated_at BEFORE UPDATE ON user_domain_projects
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 -- Add comments to tables
 COMMENT ON TABLE domains IS 'Stores company/organization domains for multi-tenancy';
-COMMENT ON TABLE roles IS 'Stores user roles for access control';
-COMMENT ON TABLE users IS 'Stores user accounts with authentication';
-COMMENT ON TABLE user_domains IS 'Junction table for many-to-many relationship between users and domains';
+COMMENT ON TABLE modules IS 'Stores modules for categorizing reference data (Task, Project, Permit)';
+COMMENT ON TABLE reference_categories IS 'Stores reference categories grouped by module';
+COMMENT ON TABLE "references" IS 'Stores reference data values for various categories';
+COMMENT ON TABLE roles IS 'Stores user roles for access control with category for multi-app support (Permit/Ticketing)';
+COMMENT ON TABLE users IS 'Stores user accounts with authentication (roles assigned through user_domain_roles)';
+COMMENT ON TABLE user_domain_roles IS 'Junction table for users, domains, and roles - allows users to have different roles in different domains';
 COMMENT ON TABLE menus IS 'Stores menu items for dynamic navigation';
 COMMENT ON TABLE menu_roles IS 'Junction table for role-based menu access control';
 COMMENT ON TABLE divisions IS 'Stores company divisions/departments';
@@ -316,18 +645,23 @@ COMMENT ON COLUMN domains.name IS 'Full name of the domain/company';
 COMMENT ON COLUMN domains.description IS 'Description of the domain/company';
 COMMENT ON COLUMN domains.is_active IS 'Whether the domain is active or not';
 
-COMMENT ON COLUMN roles.name IS 'Role name (e.g., admin, manager, employee)';
+COMMENT ON COLUMN roles.code IS 'Unique code for the role (e.g., ADMIN, PERMIT_MANAGER)';
+COMMENT ON COLUMN roles.name IS 'Display name of the role';
+COMMENT ON COLUMN roles.category IS 'Category of the role: Permit or Ticketing';
+COMMENT ON COLUMN roles.description IS 'Description of the role and its permissions';
 
-COMMENT ON COLUMN users.role_id IS 'Reference to the user role';
 COMMENT ON COLUMN users.username IS 'Username for login (globally unique)';
 COMMENT ON COLUMN users.email IS 'Email address (globally unique)';
 COMMENT ON COLUMN users.password IS 'Hashed password';
 COMMENT ON COLUMN users.full_name IS 'Full name of the user';
 COMMENT ON COLUMN users.is_active IS 'Whether the user account is active';
+COMMENT ON COLUMN users.phone_number IS 'User phone number';
+COMMENT ON COLUMN users.nip IS 'Nomor Induk Pegawai (Employee ID Number)';
 
-COMMENT ON COLUMN user_domains.user_id IS 'Reference to the user';
-COMMENT ON COLUMN user_domains.domain_id IS 'Reference to the domain';
-COMMENT ON COLUMN user_domains.is_default IS 'Whether this is the default domain for the user';
+COMMENT ON COLUMN user_domain_roles.user_id IS 'Reference to the user';
+COMMENT ON COLUMN user_domain_roles.domain_id IS 'Reference to the domain';
+COMMENT ON COLUMN user_domain_roles.role_id IS 'Reference to the role';
+COMMENT ON COLUMN user_domain_roles.is_default IS 'Whether this is the default domain-role combination for the user';
 
 COMMENT ON COLUMN menus.name IS 'Display name of the menu item';
 COMMENT ON COLUMN menus.path IS 'URL path for the menu item (unique)';

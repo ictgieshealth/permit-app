@@ -52,22 +52,22 @@ export const userService = {
     );
   },
 
-  async addDomain(id: number, domainId: number, isDefault: boolean = false) {
+  async addDomainRole(id: number, domainId: number, roleId: number, isDefault: boolean = false) {
     return await apiClient.post<ApiResponse<null>>(
-      `/users/${id}/domains`,
-      { domain_id: domainId, is_default: isDefault }
+      `/users/${id}/domain-roles`,
+      { domain_id: domainId, role_id: roleId, is_default: isDefault }
     );
   },
 
-  async removeDomain(id: number, domainId: number) {
+  async removeDomainRole(id: number, domainId: number, roleId: number) {
     return await apiClient.delete<ApiResponse<null>>(
-      `/users/${id}/domains/${domainId}`
+      `/users/${id}/domain-roles/${domainId}/${roleId}`
     );
   },
 
-  async setDefaultDomain(id: number, domainId: number) {
+  async setDefaultDomainRole(id: number, domainId: number, roleId: number) {
     return await apiClient.put<ApiResponse<null>>(
-      `/users/${id}/domains/${domainId}/set-default`,
+      `/users/${id}/domain-roles/${domainId}/${roleId}/set-default`,
       {}
     );
   },

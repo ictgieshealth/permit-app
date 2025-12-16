@@ -310,7 +310,6 @@ func (s *permitService) toResponse(permit *model.Permit) *model.PermitResponse {
 	if permit.ResponsiblePerson != nil {
 		resp.ResponsiblePerson = &model.UserResponse{
 			ID:       permit.ResponsiblePerson.ID,
-			RoleID:   permit.ResponsiblePerson.RoleID,
 			Username: permit.ResponsiblePerson.Username,
 			Email:    permit.ResponsiblePerson.Email,
 			FullName: permit.ResponsiblePerson.FullName,
@@ -321,7 +320,6 @@ func (s *permitService) toResponse(permit *model.Permit) *model.PermitResponse {
 	if permit.ResponsibleDocPerson != nil {
 		resp.ResponsibleDocPerson = &model.UserResponse{
 			ID:       permit.ResponsibleDocPerson.ID,
-			RoleID:   permit.ResponsibleDocPerson.RoleID,
 			Username: permit.ResponsibleDocPerson.Username,
 			Email:    permit.ResponsibleDocPerson.Email,
 			FullName: permit.ResponsibleDocPerson.FullName,

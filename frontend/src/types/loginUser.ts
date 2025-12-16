@@ -1,5 +1,6 @@
 import { Domain } from "./domain";
-import { User } from "./user";
+import { Role } from "./role";
+import { User, UserDomainRole } from "./user";
 
 export interface LoginRequest {
   username: string;
@@ -10,5 +11,17 @@ export interface LoginRequest {
 export interface LoginResponse {
   token: string;
   user: User;
-  default_domain?: Domain;
+  current_domain: Domain;
+  current_role: Role;
+  domains: UserDomainRole[]; // All domains user has access to
+}
+
+export interface SwitchDomainRequest {
+  domain_id: number;
+}
+
+export interface SwitchDomainResponse {
+  token: string;
+  current_domain: Domain;
+  current_role: Role;
 }

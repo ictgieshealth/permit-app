@@ -23,6 +23,16 @@ func NewRoleService(repo roleRepository.RoleRepository) RoleService {
 }
 
 func (s *roleService) CreateRole(req *model.RoleRequest) (*model.RoleResponse, error) {
+	// Check if code already exists
+	existingCode, err := s.repo.FindByCode(req.Code)
+	if err != nil {
+		return nil, err
+	}
+	if existingCode != nil {
+		return nil, errors.New("role code already exists")
+	}
+
+	// Check if name already exists
 	existing, err := s.repo.FindByName(req.Name)
 	if err != nil {
 		return nil, err
@@ -32,7 +42,10 @@ func (s *roleService) CreateRole(req *model.RoleRequest) (*model.RoleResponse, e
 	}
 
 	role := &model.Role{
-		Name: req.Name,
+		Code:        req.Code,
+		Name:        req.Name,
+		Category:    req.Category,
+		Description: req.Description,
 	}
 
 	err = s.repo.Create(role)
@@ -72,6 +85,19 @@ func (s *roleService) UpdateRole(id int64, req *model.RoleUpdateRequest) (*model
 		return nil, err
 	}
 
+	// Check code uniqueness if changed
+	if req.Code != "" && req.Code != role.Code {
+		existing, err := s.repo.FindByCode(req.Code)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return nil, errors.New("role code already exists")
+		}
+		role.Code = req.Code
+	}
+
+	// Check name uniqueness if changed
 	if req.Name != "" && req.Name != role.Name {
 		existing, err := s.repo.FindByName(req.Name)
 		if err != nil {
@@ -81,6 +107,14 @@ func (s *roleService) UpdateRole(id int64, req *model.RoleUpdateRequest) (*model
 			return nil, errors.New("role name already exists")
 		}
 		role.Name = req.Name
+	}
+
+	if req.Category != "" {
+		role.Category = req.Category
+	}
+
+	if req.Description != nil {
+		role.Description = req.Description
 	}
 
 	err = s.repo.Update(id, role)
@@ -107,9 +141,12 @@ func (s *roleService) DeleteRole(id int64) error {
 
 func (s *roleService) toResponse(role *model.Role) *model.RoleResponse {
 	return &model.RoleResponse{
-		ID:        role.ID,
-		Name:      role.Name,
-		CreatedAt: role.CreatedAt,
-		UpdatedAt: role.UpdatedAt,
+		ID:          role.ID,
+		Code:        role.Code,
+		Name:        role.Name,
+		Category:    role.Category,
+		Description: role.Description,
+		CreatedAt:   role.CreatedAt,
+		UpdatedAt:   role.UpdatedAt,
 	}
 }

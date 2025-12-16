@@ -83,6 +83,18 @@ func (c *PermitController) Create(ctx *gin.Context) {
 		return
 	}
 
+	// Validate domain_id from JWT token
+	domainID, exists := ctx.Get("domain_id")
+	if !exists || domainID == nil {
+		apiresponse.Error(ctx, http.StatusUnauthorized, "UNAUTHORIZED", "Domain context not found", nil, nil)
+		return
+	}
+	
+	if req.DomainID != domainID.(int64) {
+		apiresponse.Error(ctx, http.StatusForbidden, "FORBIDDEN", "Cannot create permit in different domain", nil, nil)
+		return
+	}
+
 	permit, err := c.service.CreatePermit(&req)
 	if err != nil {
 		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to create permit", err, nil)
@@ -130,6 +142,12 @@ func (c *PermitController) GetAll(ctx *gin.Context) {
 		return
 	}
 
+	// Extract domain_id from JWT token context
+	if domainID, exists := ctx.Get("domain_id"); exists && domainID != nil {
+		did := domainID.(int64)
+		filter.DomainID = &did
+	}
+
 	permits, total, err := c.service.GetAllPermits(&filter)
 	if err != nil {
 		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to retrieve permits", err, nil)
@@ -161,6 +179,12 @@ func (c *PermitController) Search(ctx *gin.Context) {
 		// Set search term to multiple fields
 		filter.Name = query
 		filter.PermitNo = query
+	}
+
+	// Extract domain_id from JWT token context
+	if domainID, exists := ctx.Get("domain_id"); exists && domainID != nil {
+		did := domainID.(int64)
+		filter.DomainID = &did
 	}
 
 	permits, total, err := c.service.SearchPermits(query, &filter)
@@ -239,6 +263,18 @@ func (c *PermitController) Update(ctx *gin.Context) {
 
 	if err := validator.New().Struct(&req); err != nil {
 		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Validation failed", err, nil)
+		return
+	}
+
+	// Validate domain_id from JWT token
+	domainID, exists := ctx.Get("domain_id")
+	if !exists || domainID == nil {
+		apiresponse.Error(ctx, http.StatusUnauthorized, "UNAUTHORIZED", "Domain context not found", nil, nil)
+		return
+	}
+	
+	if req.DomainID != domainID.(int64) {
+		apiresponse.Error(ctx, http.StatusForbidden, "FORBIDDEN", "Cannot update permit in different domain", nil, nil)
 		return
 	}
 

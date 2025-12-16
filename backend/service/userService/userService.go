@@ -13,15 +13,16 @@ import (
 type UserService interface {
 	Register(req *model.UserRequest) (*model.UserResponse, error)
 	Login(req *model.LoginRequest) (*model.LoginResponse, error)
+	SwitchDomain(userID int64, req *model.SwitchDomainRequest) (*model.SwitchDomainResponse, error)
 	GetUserByID(id int64) (*model.UserResponse, error)
 	GetAllUsers(filter *model.UserListRequest) ([]model.UserResponse, int64, error)
 	UpdateUser(id int64, req *model.UserUpdateRequest) (*model.UserResponse, error)
 	UpdateProfile(id int64, req *model.UpdateProfileRequest) (*model.UserResponse, error)
 	ChangePassword(id int64, req *model.ChangePasswordRequest) error
 	DeleteUser(id int64) error
-	AddUserDomain(userID int64, domainID int64, isDefault bool) error
-	RemoveUserDomain(userID int64, domainID int64) error
-	SetDefaultDomain(userID int64, domainID int64) error
+	AddUserDomainRole(userID int64, domainID int64, roleID int64, isDefault bool) error
+	RemoveUserDomainRole(userID int64, domainID int64, roleID int64) error
+	SetDefaultDomainRole(userID int64, domainID int64, roleID int64) error
 }
 
 type userService struct {
@@ -63,13 +64,12 @@ func (s *userService) Register(req *model.UserRequest) (*model.UserResponse, err
 	}
 
 	user := &model.User{
-		RoleID:      req.RoleID,
 		Username:    req.Username,
 		Email:       req.Email,
 		Password:    hashedPassword,
 		FullName:    req.FullName,
 		PhoneNumber: req.PhoneNumber,
-		NIP:         req.NIP,
+		Nip:         req.Nip,
 		IsActive:    isActive,
 	}
 
@@ -78,14 +78,15 @@ func (s *userService) Register(req *model.UserRequest) (*model.UserResponse, err
 		return nil, err
 	}
 
-	// Create user-domain relationships
-	for i, domainID := range req.DomainIDs {
-		userDomain := &model.UserDomain{
+	// Create user-domain-role relationships
+	for i, domainRole := range req.DomainRoles {
+		userDomainRole := &model.UserDomainRole{
 			UserID:    user.ID,
-			DomainID:  domainID,
-			IsDefault: i == 0, // First domain is default
+			DomainID:  domainRole.DomainID,
+			RoleID:    domainRole.RoleID,
+			IsDefault: i == 0 || domainRole.IsDefault, // First domain-role is default or as specified
 		}
-		err = s.repo.CreateUserDomain(userDomain)
+		err = s.repo.CreateUserDomainRole(userDomainRole)
 		if err != nil {
 			return nil, err
 		}
@@ -120,55 +121,145 @@ func (s *userService) Login(req *model.LoginRequest) (*model.LoginResponse, erro
 		return nil, errors.New("invalid credentials")
 	}
 
-	// Get default domain or specified domain
-	var selectedDomain *model.UserDomain
+	// Get default domain-role or specified domain
+	var selectedDomainRole *model.UserDomainRole
 	if req.DomainID != nil {
 		// Check if user has access to the specified domain
-		userDomains, _ := s.repo.GetUserDomains(user.ID)
-		for _, ud := range userDomains {
-			if ud.DomainID == *req.DomainID {
-				selectedDomain = &ud
+		userDomainRoles, _ := s.repo.GetUserDomainRoles(user.ID)
+		for _, udr := range userDomainRoles {
+			if udr.DomainID == *req.DomainID {
+				selectedDomainRole = &udr
 				break
 			}
 		}
-		if selectedDomain == nil {
+		if selectedDomainRole == nil {
 			return nil, errors.New("user does not have access to this domain")
 		}
 	} else {
-		// Get default domain
-		selectedDomain, err = s.repo.GetDefaultDomain(user.ID)
+		// Get default domain-role
+		selectedDomainRole, err = s.repo.GetDefaultDomainRole(user.ID)
 		if err != nil {
 			return nil, err
 		}
-		if selectedDomain == nil {
-			return nil, errors.New("user has no default domain set")
+		if selectedDomainRole == nil {
+			return nil, errors.New("user has no default domain-role set")
 		}
 	}
 
-	// Generate JWT token with domain context
-	token, err := s.generateToken(user, selectedDomain.DomainID)
+	// Generate JWT token with domain and role context
+	token, err := helper.GenerateTokenWithDomain(user.ID, user.Username, user.Email, selectedDomainRole.DomainID, selectedDomainRole.RoleID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert domain to response
-	var defaultDomainResponse *model.DomainResponse
-	if selectedDomain.Domain != nil {
-		defaultDomainResponse = &model.DomainResponse{
-			ID:          selectedDomain.Domain.ID,
-			Code:        selectedDomain.Domain.Code,
-			Name:        selectedDomain.Domain.Name,
-			Description: selectedDomain.Domain.Description,
-			IsActive:    selectedDomain.Domain.IsActive,
-			CreatedAt:   selectedDomain.Domain.CreatedAt,
-			UpdatedAt:   selectedDomain.Domain.UpdatedAt,
+	// Get all user domain-roles for domain switcher
+	allDomainRoles, err := s.repo.GetUserDomainRoles(user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	var domainsResponse []model.UserDomainRoleResponse
+	for _, udr := range allDomainRoles {
+		domainsResponse = append(domainsResponse, *s.toUserDomainRoleResponse(&udr))
+	}
+
+	// Convert to response
+	var currentDomain *model.DomainResponse
+	var currentRole *model.RoleResponse
+	if selectedDomainRole.Domain != nil {
+		currentDomain = &model.DomainResponse{
+			ID:          selectedDomainRole.Domain.ID,
+			Code:        selectedDomainRole.Domain.Code,
+			Name:        selectedDomainRole.Domain.Name,
+			Description: selectedDomainRole.Domain.Description,
+			IsActive:    selectedDomainRole.Domain.IsActive,
+			CreatedAt:   selectedDomainRole.Domain.CreatedAt,
+			UpdatedAt:   selectedDomainRole.Domain.UpdatedAt,
+		}
+	}
+	if selectedDomainRole.Role != nil {
+		currentRole = &model.RoleResponse{
+			ID:          selectedDomainRole.Role.ID,
+			Code:        selectedDomainRole.Role.Code,
+			Name:        selectedDomainRole.Role.Name,
+			Category:    selectedDomainRole.Role.Category,
+			Description: selectedDomainRole.Role.Description,
+			CreatedAt:   selectedDomainRole.Role.CreatedAt,
+			UpdatedAt:   selectedDomainRole.Role.UpdatedAt,
 		}
 	}
 
 	return &model.LoginResponse{
 		Token:         token,
 		User:          s.toResponse(user),
-		DefaultDomain: defaultDomainResponse,
+		CurrentDomain: currentDomain,
+		CurrentRole:   currentRole,
+		Domains:       domainsResponse,
+	}, nil
+}
+
+// SwitchDomain switches user's current domain context
+func (s *userService) SwitchDomain(userID int64, req *model.SwitchDomainRequest) (*model.SwitchDomainResponse, error) {
+	// Get user
+	user, err := s.repo.FindByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if user has access to the requested domain
+	userDomainRoles, err := s.repo.GetUserDomainRoles(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	var selectedDomainRole *model.UserDomainRole
+	for _, udr := range userDomainRoles {
+		if udr.DomainID == req.DomainID {
+			selectedDomainRole = &udr
+			break
+		}
+	}
+
+	if selectedDomainRole == nil {
+		return nil, errors.New("user does not have access to this domain")
+	}
+
+	// Generate new JWT token with new domain context
+	token, err := helper.GenerateTokenWithDomain(user.ID, user.Username, user.Email, selectedDomainRole.DomainID, selectedDomainRole.RoleID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build response
+	var currentDomain *model.DomainResponse
+	var currentRole *model.RoleResponse
+	if selectedDomainRole.Domain != nil {
+		currentDomain = &model.DomainResponse{
+			ID:          selectedDomainRole.Domain.ID,
+			Code:        selectedDomainRole.Domain.Code,
+			Name:        selectedDomainRole.Domain.Name,
+			Description: selectedDomainRole.Domain.Description,
+			IsActive:    selectedDomainRole.Domain.IsActive,
+			CreatedAt:   selectedDomainRole.Domain.CreatedAt,
+			UpdatedAt:   selectedDomainRole.Domain.UpdatedAt,
+		}
+	}
+	if selectedDomainRole.Role != nil {
+		currentRole = &model.RoleResponse{
+			ID:          selectedDomainRole.Role.ID,
+			Code:        selectedDomainRole.Role.Code,
+			Name:        selectedDomainRole.Role.Name,
+			Category:    selectedDomainRole.Role.Category,
+			Description:  selectedDomainRole.Role.Description,
+			CreatedAt:   selectedDomainRole.Role.CreatedAt,
+			UpdatedAt:   selectedDomainRole.Role.UpdatedAt,
+		}
+	}
+
+	return &model.SwitchDomainResponse{
+		Token:         token,
+		CurrentDomain: currentDomain,
+		CurrentRole:   currentRole,
 	}, nil
 }
 
@@ -225,10 +316,6 @@ func (s *userService) UpdateUser(id int64, req *model.UserUpdateRequest) (*model
 		user.Email = req.Email
 	}
 
-	if req.RoleID > 0 {
-		user.RoleID = req.RoleID
-	}
-
 	if req.Password != "" {
 		hashedPassword, err := helper.HashPassword(req.Password)
 		if err != nil {
@@ -245,30 +332,31 @@ func (s *userService) UpdateUser(id int64, req *model.UserUpdateRequest) (*model
 		user.PhoneNumber = req.PhoneNumber
 	}
 
-	if req.NIP != "" {
-		user.NIP = req.NIP
+	if req.Nip != "" {
+		user.Nip = req.Nip
 	}
 
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
 	}
 
-	// Update domain relationships if provided
-	if req.DomainIDs != nil && len(req.DomainIDs) > 0 {
-		// Delete existing domain relationships
-		err = s.repo.DeleteUserDomains(id)
+	// Update domain-role relationships if provided
+	if req.DomainRoles != nil && len(req.DomainRoles) > 0 {
+		// Delete existing domain-role relationships
+		err = s.repo.DeleteUserDomainRoles(id)
 		if err != nil {
 			return nil, err
 		}
 
-		// Create new domain relationships
-		for i, domainID := range req.DomainIDs {
-			userDomain := &model.UserDomain{
+		// Create new domain-role relationships
+		for i, domainRole := range req.DomainRoles {
+			userDomainRole := &model.UserDomainRole{
 				UserID:    user.ID,
-				DomainID:  domainID,
-				IsDefault: i == 0, // First domain is default
+				DomainID:  domainRole.DomainID,
+				RoleID:    domainRole.RoleID,
+				IsDefault: i == 0 || domainRole.IsDefault, // First domain-role is default or as specified
 			}
-			err = s.repo.CreateUserDomain(userDomain)
+			err = s.repo.CreateUserDomainRole(userDomainRole)
 			if err != nil {
 				return nil, err
 			}
@@ -314,8 +402,8 @@ func (s *userService) UpdateProfile(id int64, req *model.UpdateProfileRequest) (
 		user.PhoneNumber = req.PhoneNumber
 	}
 
-	if req.NIP != "" {
-		user.NIP = req.NIP
+	if req.Nip != "" {
+		user.Nip = req.Nip
 	}
 
 	err = s.repo.Update(id, user)
@@ -356,36 +444,37 @@ func (s *userService) DeleteUser(id int64) error {
 	return s.repo.Delete(id)
 }
 
-func (s *userService) AddUserDomain(userID int64, domainID int64, isDefault bool) error {
-	userDomain := &model.UserDomain{
+func (s *userService) AddUserDomainRole(userID int64, domainID int64, roleID int64, isDefault bool) error {
+	userDomainRole := &model.UserDomainRole{
 		UserID:    userID,
 		DomainID:  domainID,
+		RoleID:    roleID,
 		IsDefault: isDefault,
 	}
-	return s.repo.CreateUserDomain(userDomain)
+	return s.repo.CreateUserDomainRole(userDomainRole)
 }
 
-func (s *userService) RemoveUserDomain(userID int64, domainID int64) error {
-	// Get user domains
-	userDomains, err := s.repo.GetUserDomains(userID)
+func (s *userService) RemoveUserDomainRole(userID int64, domainID int64, roleID int64) error {
+	// Get user domain-roles
+	userDomainRoles, err := s.repo.GetUserDomainRoles(userID)
 	if err != nil {
 		return err
 	}
 
-	// Check if this is the last domain
-	if len(userDomains) <= 1 {
-		return errors.New("cannot remove the last domain from user")
+	// Check if this is the last domain-role
+	if len(userDomainRoles) <= 1 {
+		return errors.New("cannot remove the last domain-role from user")
 	}
 
-	// Delete the specific domain
-	return s.repo.DeleteUserDomains(userID)
+	// Delete the specific domain-role
+	return s.repo.DeleteUserDomainRoles(userID)
 }
 
-func (s *userService) SetDefaultDomain(userID int64, domainID int64) error {
-	return s.repo.UpdateDefaultDomain(userID, domainID)
+func (s *userService) SetDefaultDomainRole(userID int64, domainID int64, roleID int64) error {
+	return s.repo.UpdateDefaultDomainRole(userID, domainID, roleID)
 }
 
-func (s *userService) generateToken(user *model.User, domainID int64) (string, error) {
+func (s *userService) generateToken(user *model.User, domainID int64, roleID int64) (string, error) {
 	jwtSecret := helper.GetEnv("JWT_SECRET")
 	if jwtSecret == "" {
 		jwtSecret = "your-secret-key"
@@ -394,7 +483,7 @@ func (s *userService) generateToken(user *model.User, domainID int64) (string, e
 	claims := jwt.MapClaims{
 		"user_id":   user.ID,
 		"domain_id": domainID,
-		"role_id":   user.RoleID,
+		"role_id":   roleID,
 		"username":  user.Username,
 		"email":     user.Email,
 		"exp":       time.Now().Add(time.Hour * 24).Unix(),
@@ -411,38 +500,60 @@ func (s *userService) toResponse(user *model.User) *model.UserResponse {
 
 	response := &model.UserResponse{
 		ID:          user.ID,
-		RoleID:      user.RoleID,
 		Username:    user.Username,
 		Email:       user.Email,
 		FullName:    user.FullName,
 		PhoneNumber: user.PhoneNumber,
-		NIP:         user.NIP,
+		Nip:         user.Nip,
 		IsActive:    user.IsActive,
 		CreatedAt:   user.CreatedAt,
 		UpdatedAt:   user.UpdatedAt,
 	}
 
-	if user.Role != nil {
-		response.Role = &model.RoleResponse{
-			ID:        user.Role.ID,
-			Name:      user.Role.Name,
-			CreatedAt: user.Role.CreatedAt,
-			UpdatedAt: user.Role.UpdatedAt,
+	// Convert user domain roles to response
+	if user.UserDomainRoles != nil && len(user.UserDomainRoles) > 0 {
+		for _, udr := range user.UserDomainRoles {
+			response.DomainRoles = append(response.DomainRoles, *s.toUserDomainRoleResponse(&udr))
 		}
 	}
 
-	// Convert domains to response
-	if user.Domains != nil && len(user.Domains) > 0 {
-		for _, domain := range user.Domains {
-			response.Domains = append(response.Domains, model.DomainResponse{
-				ID:          domain.ID,
-				Code:        domain.Code,
-				Name:        domain.Name,
-				Description: domain.Description,
-				IsActive:    domain.IsActive,
-				CreatedAt:   domain.CreatedAt,
-				UpdatedAt:   domain.UpdatedAt,
-			})
+	return response
+}
+
+func (s *userService) toUserDomainRoleResponse(udr *model.UserDomainRole) *model.UserDomainRoleResponse {
+	if udr == nil {
+		return nil
+	}
+
+	response := &model.UserDomainRoleResponse{
+		ID:        udr.ID,
+		UserID:    udr.UserID,
+		DomainID:  udr.DomainID,
+		RoleID:    udr.RoleID,
+		IsDefault: udr.IsDefault,
+	}
+
+	if udr.Domain != nil {
+		response.Domain = &model.DomainResponse{
+			ID:          udr.Domain.ID,
+			Code:        udr.Domain.Code,
+			Name:        udr.Domain.Name,
+			Description: udr.Domain.Description,
+			IsActive:    udr.Domain.IsActive,
+			CreatedAt:   udr.Domain.CreatedAt,
+			UpdatedAt:   udr.Domain.UpdatedAt,
+		}
+	}
+
+	if udr.Role != nil {
+		response.Role = &model.RoleResponse{
+			ID:          udr.Role.ID,
+			Code:        udr.Role.Code,
+			Name:        udr.Role.Name,
+			Category:    udr.Role.Category,
+			Description: udr.Role.Description,
+			CreatedAt:   udr.Role.CreatedAt,
+			UpdatedAt:   udr.Role.UpdatedAt,
 		}
 	}
 

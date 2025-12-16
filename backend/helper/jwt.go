@@ -26,11 +26,29 @@ func GenerateToken(idUser string, nmUser string) (string, error) {
 	claims := jwt.MapClaims{
 		"id_user": idUser,
 		"nm_user": nmUser,
-		"exp":     time.Now().Add(time.Minute * 60).Unix(), // Extended to 24 hours
+		"exp":     time.Now().Add(time.Hour * 24).Unix(), // 24 hours
 	}
 
 	jwt := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	res, err := jwt.SignedString([]byte(SECRETKEY))
+
+	return res, err
+}
+
+// GenerateTokenWithDomain generates JWT token with user, domain, and role context
+func GenerateTokenWithDomain(userID int64, username string, email string, domainID int64, roleID int64) (string, error) {
+	claims := jwt.MapClaims{
+		"user_id":   userID,
+		"username":  username,
+		"email":     email,
+		"domain_id": domainID,
+		"role_id":   roleID,
+		"exp":       time.Now().Add(time.Hour * 24).Unix(), // 24 hours
+		"iat":       time.Now().Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	res, err := token.SignedString([]byte(SECRETKEY))
 
 	return res, err
 }

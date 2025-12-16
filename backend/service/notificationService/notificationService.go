@@ -169,8 +169,8 @@ func (s *notificationService) processPermitNotification(permit model.Permit, not
 		}
 	}
 
-	// Add Admin users
-	admins, err := s.userRepo.FindByRoleName("admin")
+	// Add Admin users (using role code)
+	admins, err := s.userRepo.FindByRoleCode("ADMIN")
 	if err == nil {
 		for _, admin := range admins {
 			if _, exists := recipients[admin.ID]; !exists {
@@ -180,9 +180,9 @@ func (s *notificationService) processPermitNotification(permit model.Permit, not
 		}
 	}
 
-	// Add Manager users from the same domain
+	// Add Permit Manager users from the same domain
 	if permit.DomainID > 0 {
-		managers, err := s.userRepo.FindManagersByDomain(permit.DomainID)
+		managers, err := s.userRepo.FindByDomainAndRoleCode(permit.DomainID, "PERMIT_MANAGER")
 		if err == nil {
 			for _, manager := range managers {
 				if _, exists := recipients[manager.ID]; !exists {

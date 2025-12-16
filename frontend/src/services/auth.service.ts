@@ -1,9 +1,10 @@
 import { apiClient } from '@/lib/api-client';
 import { STORAGE_KEYS } from '@/config/api';
-import { LoginRequest, LoginResponse } from '@/types/loginUser';
+import { LoginRequest, LoginResponse, SwitchDomainRequest, SwitchDomainResponse } from '@/types/loginUser';
 import { ApiResponse } from '@/types/api';
-import { User } from '@/types/user';
+import { User, UserDomainRole } from '@/types/user';
 import { Domain } from '@/types/domain';
+import { Role } from '@/types/role';
 
 export const authService = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
@@ -18,19 +19,34 @@ export const authService = {
     const loginData = response.data;
     
     if (loginData) {
-      // Store token, user data and domain in localStorage
+      // Store token, user data, current domain/role, and all domains
       localStorage.setItem(STORAGE_KEYS.TOKEN, loginData.token);
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(loginData.user));
-      
-      if (loginData.default_domain) {
-        localStorage.setItem(
-          STORAGE_KEYS.DOMAIN,
-          JSON.stringify(loginData.default_domain)
-        );
-      }
+      localStorage.setItem(STORAGE_KEYS.DOMAIN, JSON.stringify(loginData.current_domain));
+      localStorage.setItem('current_role', JSON.stringify(loginData.current_role));
+      localStorage.setItem('user_domains', JSON.stringify(loginData.domains));
     }
     
     return loginData;
+  },
+
+  async switchDomain(domainId: number): Promise<SwitchDomainResponse> {
+    const request: SwitchDomainRequest = { domain_id: domainId };
+    const response = await apiClient.post<ApiResponse<SwitchDomainResponse>>(
+      '/auth/switch-domain',
+      request
+    );
+
+    const switchData = response.data;
+    
+    if (switchData) {
+      // Update token and current domain/role
+      localStorage.setItem(STORAGE_KEYS.TOKEN, switchData.token);
+      localStorage.setItem(STORAGE_KEYS.DOMAIN, JSON.stringify(switchData.current_domain));
+      localStorage.setItem('current_role', JSON.stringify(switchData.current_role));
+    }
+    
+    return switchData;
   },
 
   async logout(): Promise<void> {
@@ -38,6 +54,8 @@ export const authService = {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
     localStorage.removeItem(STORAGE_KEYS.USER);
     localStorage.removeItem(STORAGE_KEYS.DOMAIN);
+    localStorage.removeItem('current_role');
+    localStorage.removeItem('user_domains');
   },  
 
   async getProfile(): Promise<User> {
@@ -57,16 +75,28 @@ export const authService = {
     return domainStr ? JSON.parse(domainStr) : null;
   },
 
+  getStoredRole(): Role | null {
+    if (typeof window === 'undefined') return null;
+    const roleStr = localStorage.getItem('current_role');
+    return roleStr ? JSON.parse(roleStr) : null;
+  },
+
+  getStoredDomains(): UserDomainRole[] {
+    if (typeof window === 'undefined') return [];
+    const domainsStr = localStorage.getItem('user_domains');
+    return domainsStr ? JSON.parse(domainsStr) : [];
+  },
+
   isAuthenticated(): boolean {
     if (typeof window === 'undefined') return false;
     return !!localStorage.getItem(STORAGE_KEYS.TOKEN);
   },
   
-  hasRole(allowedRoles: string[]): boolean {
+  hasRole(allowedRoleCodes: string[]): boolean {
     if (typeof window === 'undefined') return false;
-    const user = this.getStoredUser();
-    if (!user || !user.role) return false;
-    return allowedRoles.includes(user.role.name);
+    const role = this.getStoredRole();
+    if (!role) return false;
+    return allowedRoleCodes.includes(role.code);
   },
 
 };

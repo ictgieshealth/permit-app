@@ -1,9 +1,17 @@
 import { Domain } from "./domain";
 import { Role } from "./role";
 
+export interface UserDomainRole {
+  user_id: number;
+  domain_id: number;
+  role_id: number;
+  is_default: boolean;
+  domain?: Domain;
+  role?: Role;
+}
+
 export interface User {
   id: number;
-  role_id: number;
   username: string;
   email: string;
   full_name: string;
@@ -12,12 +20,16 @@ export interface User {
   is_active: boolean;
   created_at: string;
   updated_at: string;
-  role?: Role;
-  domains?: Domain[];
+  domain_roles?: UserDomainRole[];
+}
+
+export interface DomainRoleRequest {
+  domain_id: number;
+  role_id: number;
+  is_default: boolean;
 }
 
 export interface UserRequest {
-  role_id: number;
   username: string;
   email: string;
   password: string;
@@ -25,11 +37,10 @@ export interface UserRequest {
   phone_number?: string;
   nip?: string;
   is_active?: boolean;
-  domain_ids: number[];
+  domain_roles: DomainRoleRequest[];
 }
 
 export interface UserUpdateRequest {
-  role_id?: number;
   username?: string;
   email?: string;
   password?: string;
@@ -37,7 +48,7 @@ export interface UserUpdateRequest {
   phone_number?: string;
   nip?: string;
   is_active?: boolean;
-  domain_ids?: number[];
+  domain_roles?: DomainRoleRequest[];
 }
 
 export interface ChangePasswordRequest {

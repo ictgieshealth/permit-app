@@ -26,13 +26,12 @@ export default function CreateUserPage() {
     full_name: "",
     phone_number: "",
     nip: "",
-    role_id: "",
     is_active: true,
-    domain_ids: [] as number[],
+    domain_roles: [] as { domain_id: number; role_id: number; is_default: boolean }[],
   });
 
   useEffect(() => {
-    if (!authService.hasRole(["admin"])) {
+    if (!authService.hasRole(["ADMIN"])) {
       router.push("/");
       return;
     }
@@ -66,19 +65,46 @@ export default function CreateUserPage() {
       const checked = (e.target as HTMLInputElement).checked;
       if (name === "is_active") {
         setFormData({ ...formData, [name]: checked });
-      } else {
-        // Handle domain checkboxes
-        const domainId = parseInt(value);
-        setFormData({
-          ...formData,
-          domain_ids: checked
-            ? [...formData.domain_ids, domainId]
-            : formData.domain_ids.filter((id) => id !== domainId),
-        });
       }
     } else {
       setFormData({ ...formData, [name]: value });
     }
+  };
+
+  const handleDomainRoleToggle = (domainId: number) => {
+    const existingIndex = formData.domain_roles.findIndex(dr => dr.domain_id === domainId);
+    if (existingIndex >= 0) {
+      // Remove domain role
+      setFormData({
+        ...formData,
+        domain_roles: formData.domain_roles.filter(dr => dr.domain_id !== domainId),
+      });
+    } else {
+      // Add domain role (requires role selection later)
+      setFormData({
+        ...formData,
+        domain_roles: [...formData.domain_roles, { domain_id: domainId, role_id: 0, is_default: formData.domain_roles.length === 0 }],
+      });
+    }
+  };
+
+  const handleRoleChange = (domainId: number, roleId: number) => {
+    setFormData({
+      ...formData,
+      domain_roles: formData.domain_roles.map(dr =>
+        dr.domain_id === domainId ? { ...dr, role_id: roleId } : dr
+      ),
+    });
+  };
+
+  const handleDefaultChange = (domainId: number) => {
+    setFormData({
+      ...formData,
+      domain_roles: formData.domain_roles.map(dr => ({
+        ...dr,
+        is_default: dr.domain_id === domainId,
+      })),
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -91,13 +117,22 @@ export default function CreateUserPage() {
       return;
     }
 
-    if (formData.domain_ids.length === 0) {
+    if (formData.domain_roles.length === 0) {
       setError("Please select at least one domain");
       return;
     }
 
-    if (!formData.role_id) {
-      setError("Please select a role");
+    // Check if all domain roles have role selected
+    const invalidDomainRole = formData.domain_roles.find(dr => !dr.role_id || dr.role_id === 0);
+    if (invalidDomainRole) {
+      setError("Please select a role for all selected domains");
+      return;
+    }
+
+    // Check if at least one is default
+    const hasDefault = formData.domain_roles.some(dr => dr.is_default);
+    if (!hasDefault && formData.domain_roles.length > 0) {
+      setError("Please set one domain-role combination as default");
       return;
     }
 
@@ -110,9 +145,8 @@ export default function CreateUserPage() {
         full_name: formData.full_name,
         phone_number: formData.phone_number,
         nip: formData.nip,
-        role_id: parseInt(formData.role_id),
         is_active: formData.is_active,
-        domain_ids: formData.domain_ids,
+        domain_roles: formData.domain_roles,
       });
 
       router.push("/users");
@@ -248,51 +282,73 @@ export default function CreateUserPage() {
 
           <div>
             <Label>
-              Role <span className="text-error-500">*</span>
+              Domain & Role Assignments <span className="text-error-500">*</span>
             </Label>
-            <select
-              name="role_id"
-              value={formData.role_id}
-              onChange={handleChange}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            >
-              <option value="">Select a role</option>
-              {roles.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <Label>
-              Domains <span className="text-error-500">*</span>
-            </Label>
-            <div className="p-4 space-y-2 border border-gray-300 rounded-lg dark:border-gray-700">
+            <div className="p-4 space-y-4 border border-gray-300 rounded-lg dark:border-gray-700">
               {domains.length === 0 ? (
                 <p className="text-sm text-gray-500">No domains available</p>
               ) : (
-                domains.map((domain) => (
-                  <label
-                    key={domain.id}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 p-2 rounded"
-                  >
-                    <input
-                      type="checkbox"
-                      value={domain.id}
-                      checked={formData.domain_ids.includes(domain.id)}
-                      onChange={handleChange}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">
-                      {domain.name} ({domain.code})
-                    </span>
-                  </label>
-                ))
+                domains.map((domain) => {
+                  const domainRole = formData.domain_roles.find(dr => dr.domain_id === domain.id);
+                  const isSelected = !!domainRole;
+                  
+                  return (
+                    <div key={domain.id} className="p-3 border border-gray-200 rounded-lg dark:border-gray-600">
+                      <label className="flex items-center gap-2 cursor-pointer mb-2">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleDomainRoleToggle(domain.id)}
+                          className="w-4 h-4"
+                        />
+                        <span className="font-medium text-gray-700 dark:text-gray-300">
+                          {domain.name} ({domain.code})
+                        </span>
+                      </label>
+                      
+                      {isSelected && (
+                        <div className="ml-6 space-y-2">
+                          <div>
+                            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
+                              Role for this domain:
+                            </label>
+                            <select
+                              value={domainRole?.role_id || ""}
+                              onChange={(e) => handleRoleChange(domain.id, parseInt(e.target.value))}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                              required
+                            >
+                              <option value="">Select Role</option>
+                              {roles.map((role) => (
+                                <option key={role.id} value={role.id}>
+                                  {role.name} ({role.category})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="default_domain"
+                              checked={domainRole?.is_default || false}
+                              onChange={() => handleDefaultChange(domain.id)}
+                              className="w-4 h-4"
+                            />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                              Set as default domain
+                            </span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Select domains and assign a role for each. Mark one as default for login.
+            </p>
           </div>
 
           <div>

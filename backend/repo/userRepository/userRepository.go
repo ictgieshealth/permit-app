@@ -9,7 +9,7 @@ import (
 
 type UserRepository interface {
 	Create(user *model.User) error
-	CreateUserDomain(userDomain *model.UserDomain) error
+	CreateUserDomainRole(userDomainRole *model.UserDomainRole) error
 	FindByID(id int64) (*model.User, error)
 	FindById(id int64) (*model.User, error)
 	FindByUsername(username string) (*model.User, error)
@@ -18,12 +18,12 @@ type UserRepository interface {
 	FindAll(filter *model.UserListRequest) ([]model.User, int64, error)
 	Update(id int64, user *model.User) error
 	Delete(id int64) error
-	DeleteUserDomains(userID int64) error
-	GetUserDomains(userID int64) ([]model.UserDomain, error)
-	GetDefaultDomain(userID int64) (*model.UserDomain, error)
-	UpdateDefaultDomain(userID int64, domainID int64) error
-	FindByRoleName(roleName string) ([]model.User, error)
-	FindManagersByDomain(domainID int64) ([]model.User, error)
+	DeleteUserDomainRoles(userID int64) error
+	GetUserDomainRoles(userID int64) ([]model.UserDomainRole, error)
+	GetDefaultDomainRole(userID int64) (*model.UserDomainRole, error)
+	UpdateDefaultDomainRole(userID int64, domainID int64, roleID int64) error
+	FindByRoleCode(roleCode string) ([]model.User, error)
+	FindByDomainAndRoleCode(domainID int64, roleCode string) ([]model.User, error)
 }
 
 type userRepository struct {
@@ -38,15 +38,14 @@ func (r *userRepository) Create(user *model.User) error {
 	return r.db.Create(user).Error
 }
 
-func (r *userRepository) CreateUserDomain(userDomain *model.UserDomain) error {
-	return r.db.Create(userDomain).Error
+func (r *userRepository) CreateUserDomainRole(userDomainRole *model.UserDomainRole) error {
+	return r.db.Create(userDomainRole).Error
 }
 
 func (r *userRepository) FindByID(id int64) (*model.User, error) {
 	var user model.User
-	err := r.db.Preload("Role").
-		Preload("Domains").
-		Preload("UserDomains.Domain").
+	err := r.db.Preload("UserDomainRoles.Domain").
+		Preload("UserDomainRoles.Role").
 		Where("id = ?", id).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -59,9 +58,8 @@ func (r *userRepository) FindByID(id int64) (*model.User, error) {
 
 func (r *userRepository) FindByUsername(username string) (*model.User, error) {
 	var user model.User
-	err := r.db.Preload("Role").
-		Preload("Domains").
-		Preload("UserDomains.Domain").
+	err := r.db.Preload("UserDomainRoles.Domain").
+		Preload("UserDomainRoles.Role").
 		Where("username = ?", username).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -74,9 +72,8 @@ func (r *userRepository) FindByUsername(username string) (*model.User, error) {
 
 func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 	var user model.User
-	err := r.db.Preload("Role").
-		Preload("Domains").
-		Preload("UserDomains.Domain").
+	err := r.db.Preload("UserDomainRoles.Domain").
+		Preload("UserDomainRoles.Role").
 		Where("email = ?", email).First(&user).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -89,9 +86,8 @@ func (r *userRepository) FindByEmail(email string) (*model.User, error) {
 
 func (r *userRepository) FindByUsernameOrEmail(usernameOrEmail string) (*model.User, error) {
 	var user model.User
-	err := r.db.Preload("Role").
-		Preload("Domains").
-		Preload("UserDomains.Domain").
+	err := r.db.Preload("UserDomainRoles.Domain").
+		Preload("UserDomainRoles.Role").
 		Where("username = ? OR email = ?", usernameOrEmail, usernameOrEmail).
 		First(&user).Error
 	if err != nil {
@@ -108,18 +104,30 @@ func (r *userRepository) FindAll(filter *model.UserListRequest) ([]model.User, i
 	var total int64
 
 	query := r.db.Model(&model.User{}).
-		Preload("Role").
-		Preload("Domains").
-		Preload("UserDomains.Domain")
+		Preload("UserDomainRoles.Domain").
+		Preload("UserDomainRoles.Role")
 
 	// Filter by domain if specified
 	if filter.DomainID != nil {
-		query = query.Joins("JOIN user_domains ON user_domains.user_id = users.id").
-			Where("user_domains.domain_id = ?", *filter.DomainID)
+		query = query.Joins("JOIN user_domain_roles ON user_domain_roles.user_id = users.id").
+			Where("user_domain_roles.domain_id = ?", *filter.DomainID)
 	}
 
+	// Filter by role if specified
 	if filter.RoleID != nil {
-		query = query.Where("role_id = ?", *filter.RoleID)
+		if filter.DomainID == nil {
+			query = query.Joins("JOIN user_domain_roles ON user_domain_roles.user_id = users.id")
+		}
+		query = query.Where("user_domain_roles.role_id = ?", *filter.RoleID)
+	}
+
+	// Filter by role category if specified
+	if filter.Category != "" {
+		if filter.DomainID == nil && filter.RoleID == nil {
+			query = query.Joins("JOIN user_domain_roles ON user_domain_roles.user_id = users.id")
+		}
+		query = query.Joins("JOIN roles ON roles.id = user_domain_roles.role_id").
+			Where("roles.category = ?", filter.Category)
 	}
 
 	if filter.Username != "" {
@@ -137,6 +145,9 @@ func (r *userRepository) FindAll(filter *model.UserListRequest) ([]model.User, i
 	if filter.IsActive != nil {
 		query = query.Where("is_active = ?", *filter.IsActive)
 	}
+
+	// Use distinct to avoid duplicate users when joining
+	query = query.Distinct()
 
 	err := query.Count(&total).Error
 	if err != nil {
@@ -164,42 +175,46 @@ func (r *userRepository) Delete(id int64) error {
 	return r.db.Where("id = ?", id).Delete(&model.User{}).Error
 }
 
-func (r *userRepository) DeleteUserDomains(userID int64) error {
-	return r.db.Where("user_id = ?", userID).Delete(&model.UserDomain{}).Error
+func (r *userRepository) DeleteUserDomainRoles(userID int64) error {
+	return r.db.Where("user_id = ?", userID).Delete(&model.UserDomainRole{}).Error
 }
 
-func (r *userRepository) GetUserDomains(userID int64) ([]model.UserDomain, error) {
-	var userDomains []model.UserDomain
-	err := r.db.Preload("Domain").Where("user_id = ?", userID).Find(&userDomains).Error
-	return userDomains, err
-}
-
-func (r *userRepository) GetDefaultDomain(userID int64) (*model.UserDomain, error) {
-	var userDomain model.UserDomain
+func (r *userRepository) GetUserDomainRoles(userID int64) ([]model.UserDomainRole, error) {
+	var userDomainRoles []model.UserDomainRole
 	err := r.db.Preload("Domain").
+		Preload("Role").
+		Where("user_id = ?", userID).
+		Find(&userDomainRoles).Error
+	return userDomainRoles, err
+}
+
+func (r *userRepository) GetDefaultDomainRole(userID int64) (*model.UserDomainRole, error) {
+	var userDomainRole model.UserDomainRole
+	err := r.db.Preload("Domain").
+		Preload("Role").
 		Where("user_id = ? AND is_default = ?", userID, true).
-		First(&userDomain).Error
+		First(&userDomainRole).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &userDomain, nil
+	return &userDomainRole, nil
 }
 
-func (r *userRepository) UpdateDefaultDomain(userID int64, domainID int64) error {
-	// First, set all domains to non-default
-	err := r.db.Model(&model.UserDomain{}).
+func (r *userRepository) UpdateDefaultDomainRole(userID int64, domainID int64, roleID int64) error {
+	// First, set all domain-roles to non-default for this user
+	err := r.db.Model(&model.UserDomainRole{}).
 		Where("user_id = ?", userID).
 		Update("is_default", false).Error
 	if err != nil {
 		return err
 	}
 
-	// Then, set the specified domain as default
-	return r.db.Model(&model.UserDomain{}).
-		Where("user_id = ? AND domain_id = ?", userID, domainID).
+	// Then, set the specified domain-role as default
+	return r.db.Model(&model.UserDomainRole{}).
+		Where("user_id = ? AND domain_id = ? AND role_id = ?", userID, domainID, roleID).
 		Update("is_default", true).Error
 }
 
@@ -207,21 +222,25 @@ func (r *userRepository) FindById(id int64) (*model.User, error) {
 	return r.FindByID(id)
 }
 
-func (r *userRepository) FindByRoleName(roleName string) ([]model.User, error) {
+func (r *userRepository) FindByRoleCode(roleCode string) ([]model.User, error) {
 	var users []model.User
-	err := r.db.Joins("JOIN roles ON roles.id = users.role_id").
-		Where("roles.name = ? AND users.is_active = ?", roleName, true).
-		Preload("Role").
+	err := r.db.Joins("JOIN user_domain_roles ON user_domain_roles.user_id = users.id").
+		Joins("JOIN roles ON roles.id = user_domain_roles.role_id").
+		Where("roles.code = ? AND users.is_active = ?", roleCode, true).
+		Preload("UserDomainRoles.Domain").
+		Preload("UserDomainRoles.Role").
+		Distinct().
 		Find(&users).Error
 	return users, err
 }
 
-func (r *userRepository) FindManagersByDomain(domainID int64) ([]model.User, error) {
+func (r *userRepository) FindByDomainAndRoleCode(domainID int64, roleCode string) ([]model.User, error) {
 	var users []model.User
-	err := r.db.Joins("JOIN roles ON roles.id = users.role_id").
-		Joins("JOIN user_domains ON user_domains.user_id = users.id").
-		Where("roles.name = ? AND user_domains.domain_id = ? AND users.is_active = ?", "manager", domainID, true).
-		Preload("Role").
+	err := r.db.Joins("JOIN user_domain_roles ON user_domain_roles.user_id = users.id").
+		Joins("JOIN roles ON roles.id = user_domain_roles.role_id").
+		Where("roles.code = ? AND user_domain_roles.domain_id = ? AND users.is_active = ?", roleCode, domainID, true).
+		Preload("UserDomainRoles.Domain").
+		Preload("UserDomainRoles.Role").
 		Distinct().
 		Find(&users).Error
 	return users, err
