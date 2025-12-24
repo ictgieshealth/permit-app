@@ -115,6 +115,7 @@ export interface TaskUpdateRequest {
   description_after?: string;
   priority_id: number;
   stack_id: number;
+  type_id?: number;
   assigned_id?: number;
   due_date?: string;
 }
