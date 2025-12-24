@@ -13,6 +13,7 @@ type ProjectRepository interface {
 	FindByID(id int64) (*model.Project, error)
 	FindByDomainID(domainID int64) ([]model.Project, error)
 	FindByUserID(userID int64) ([]model.Project, error)
+	FindUsersByProjectID(projectID int64) ([]model.User, error)
 	Update(project *model.Project) error
 	UpdateFields(id int64, fields map[string]interface{}) error
 	Delete(id int64) error
@@ -113,6 +114,16 @@ func (r *projectRepositoryImpl) FindByUserID(userID int64) ([]model.Project, err
 		Order("projects.created_at DESC").
 		Find(&projects).Error
 	return projects, err
+}
+
+func (r *projectRepositoryImpl) FindUsersByProjectID(projectID int64) ([]model.User, error) {
+	var users []model.User
+	err := r.db.
+		Joins("JOIN user_domain_projects ON user_domain_projects.user_id = users.id").
+		Where("user_domain_projects.project_id = ?", projectID).
+		Find(&users).Error
+
+	return users, err
 }
 
 func (r *projectRepositoryImpl) Update(project *model.Project) error {

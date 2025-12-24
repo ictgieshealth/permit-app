@@ -468,8 +468,10 @@ INSERT INTO users (username, email, password, full_name, is_active) VALUES
 ('admin', 'admin@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'System Administrator', true),
 ('manager1', 'manager1@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Permit Manager One', true),
 ('employee1', 'employee1@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Permit Employee One', true),
+('ticketing_pic', 'ticketing.pic@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Ticketing PIC', true),
 ('ticketing_dev', 'ticketing.dev@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Ticketing Developer', true),
-('ticketing_manager', 'ticketing.manager@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Ticketing Manager One', true);
+('ticketing_manager', 'ticketing.manager@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Ticketing Manager One', true),
+('ticketing_headunit', 'ticketing.headunit@example.com', '$2a$10$JhNQe7yZL1btTXQ9q27g4Ooz09HnlGwYATSfDFVRJJYahHGiOUDxy', 'Ticketing Head of Unit', true);
 
 -- Sample User-Domain-Role relationships (users can have different roles in different domains)
 INSERT INTO user_domain_roles (user_id, domain_id, role_id, is_default) VALUES
@@ -481,11 +483,18 @@ INSERT INTO user_domain_roles (user_id, domain_id, role_id, is_default) VALUES
 -- Permit Employee has Permit Employee role in COMPANY_A and COMPANY_B
 (3, 1, 3, true),   -- employee1 -> COMPANY_A -> Permit Employee (default)
 (3, 2, 3, false),  -- employee1 -> COMPANY_B -> Permit Employee
+-- Ticketing PIC has Ticketing PIC role in COMPANY_B
+(4, 1, 5, true),   -- ticketing_pic -> COMPANY_A -> Ticketing PIC
+(4, 2, 5, false),   -- ticketing_pic -> COMPANY_B -> Ticketing PIC
 -- Ticketing Developer has Ticketing Developer role in COMPANY_B
-(4, 2, 6, true),   -- ticketing_dev -> COMPANY_B -> Ticketing Developer
+(5, 1, 4, false),   -- ticketing_dev -> COMPANY_A -> Ticketing Developer
+(5, 2, 4, false),   -- ticketing_dev -> COMPANY_B -> Ticketing Developer
 -- Ticketing Manager has Ticketing Manager role in COMPANY_A and COMPANY_B
-(5, 1, 5, true),   -- ticketing_manager -> COMPANY_A -> Ticketing Manager (default)
-(5, 2, 5, false);  -- ticketing_manager -> COMPANY_B -> Ticketing Manager
+(6, 1, 6, true),   -- ticketing_manager -> COMPANY_A -> Ticketing Manager (default)
+(6, 2, 6, false),  -- ticketing_manager -> COMPANY_B -> Ticketing Manager
+-- Ticketing Head of Unit has Ticketing Head of Unit role in COMPANY_A
+(7, 1, 7, true),   -- ticketing_headunit -> COMPANY_A -> Ticketing Head of Unit
+(7, 2, 7, false);  -- ticketing_headunit -> COMPANY_B -> Ticketing Head of Unit
 
 -- Sample Menus
 INSERT INTO menus (name, path, icon, parent_id, order_index, is_active) VALUES
@@ -529,6 +538,33 @@ INSERT INTO menu_roles (menu_id, role_id) VALUES
 INSERT INTO menu_roles (menu_id, role_id) VALUES
 (1, 3), -- Dashboard -> Employee
 (2, 3); -- Permits -> Employee
+
+-- role_id = 4 (Ticketing Developer)
+INSERT INTO menu_roles (menu_id, role_id) VALUES
+(1, 4), -- Dashboard -> Ticketing Developer
+(3, 4), -- Tasks -> Ticketing Developer
+(4, 4), -- Task Requests -> Ticketing Developer
+(5, 4); -- Projects -> Ticketing Developer
+
+-- role_id = 5 (Ticketing PIC)
+INSERT INTO menu_roles (menu_id, role_id) VALUES
+(1, 5), -- Dashboard -> Ticketing PIC
+(3, 5), -- Tasks -> Ticketing PIC
+(4, 5); -- Task Requests -> Ticketing PIC
+
+-- role_id = 6 (Ticketing Manager)
+INSERT INTO menu_roles (menu_id, role_id) VALUES
+(1, 6), -- Dashboard -> Ticketing Manager
+(3, 6), -- Tasks -> Ticketing Manager
+(4, 6), -- Task Requests -> Ticketing Manager
+(5, 6); -- Projects -> Ticketing Manager
+
+-- role_id = 7 (Ticketing Head of Unit)
+INSERT INTO menu_roles (menu_id, role_id) VALUES
+(1, 7), -- Dashboard -> Ticketing Head of Unit
+(3, 7), -- Tasks -> Ticketing Head of Unit
+(4, 7), -- Task Requests -> Ticketing Head of Unit
+(5, 7); -- Projects -> Ticketing Head of Unit
 
 -- Sample Divisions
 INSERT INTO divisions (domain_id, code, name) VALUES

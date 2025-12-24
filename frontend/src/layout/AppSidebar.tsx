@@ -61,28 +61,32 @@ const AppSidebar: React.FC = () => {
     try {
       setMenuLoading(true);
       const menus = await menuService.getUserMenus();
-      
+
       // Separate main menu items from master data and ticketing items
       const masterDataPaths = ['/domains', '/divisions', '/users', '/menus', '/permit-types', '/roles'];
-      const ticketingPaths = ['/tasks', '/tasks/task-requests', '/task-requests', '/projects'];
-      
-      const mainMenus = menus.filter((menu) => !menu.parent_id && !masterDataPaths.includes(menu.path) && !ticketingPaths.includes(menu.path));
-      const masterDataMenus = menus.filter((menu) => !menu.parent_id && masterDataPaths.includes(menu.path));
-      const ticketingMenus = menus.filter((menu) => !menu.parent_id && ticketingPaths.includes(menu.path));
-      
-      const convertMenuToNavItem = (menu: Menu): NavItem => ({
-        name: menu.name,
-        icon: menu.icon ? iconMap[menu.icon] || <PageIcon /> : <PageIcon />,
-        path: menu.path,
-        subItems: menu.children?.map((child) => ({
-          name: child.name,
-          path: child.path,
-        })),
-      });
+      const ticketingPaths = ['/tasks', '/tasks/task-requests', '/projects'];
 
-      setNavItems(mainMenus.map(convertMenuToNavItem));
-      setTicketingItems(ticketingMenus.map(convertMenuToNavItem));
-      setOthersItems(masterDataMenus.map(convertMenuToNavItem));
+      if (!menus || menus.length === 0) {
+        setNavItems([]);
+      } else {
+        const mainMenus = menus.filter((menu) => !menu.parent_id && !masterDataPaths.includes(menu.path) && !ticketingPaths.includes(menu.path));
+        const masterDataMenus = menus.filter((menu) => !menu.parent_id && masterDataPaths.includes(menu.path));
+        const ticketingMenus = menus.filter((menu) => !menu.parent_id && ticketingPaths.includes(menu.path));
+
+        const convertMenuToNavItem = (menu: Menu): NavItem => ({
+          name: menu.name,
+          icon: menu.icon ? iconMap[menu.icon] || <PageIcon /> : <PageIcon />,
+          path: menu.path,
+          subItems: menu.children?.map((child) => ({
+            name: child.name,
+            path: child.path,
+          })),
+        });
+
+        setNavItems(mainMenus.map(convertMenuToNavItem));
+        setTicketingItems(ticketingMenus.map(convertMenuToNavItem));
+        setOthersItems(masterDataMenus.map(convertMenuToNavItem));
+      }
     } catch (err) {
       console.error("Failed to load user menus:", err);
       // Fallback to default menus if loading fails
@@ -284,7 +288,7 @@ const AppSidebar: React.FC = () => {
 
   const handleDomainSwitch = async (domainId: number) => {
     if (domainId === currentDomain?.id || switchingDomain) return;
-    
+
     try {
       setSwitchingDomain(true);
       await switchDomain(domainId);
@@ -396,7 +400,7 @@ const AppSidebar: React.FC = () => {
           </div>
         </div>
       )}
-      
+
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
           <div className="flex flex-col gap-4">

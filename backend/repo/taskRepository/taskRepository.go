@@ -26,10 +26,12 @@ type TaskRepository interface {
 	GetApprovalTasksByTaskID(taskID int64) ([]model.ApprovalTask, error)
 	GetApprovalTaskBySequence(taskID int64, sequence int16) (*model.ApprovalTask, error)
 	UpdateApprovalTask(approvalTask *model.ApprovalTask) error
+	UpdateTaskApprovalStatus(taskID, approvalStatusID int64, approvedBy *int64, approvalDate *time.Time, updatedBy int64) error
 
 	// Task File related
 	CreateTaskFiles(files []model.TaskFile) error
 	GetTaskFilesByTaskID(taskID int64) ([]model.TaskFile, error)
+	GetTaskFileByID(id int64) (*model.TaskFile, error)
 	DeleteTaskFile(id int64) error
 }
 
@@ -168,7 +170,67 @@ func (r *taskRepository) GetAll(domainID int64, filters map[string]interface{}, 
 }
 
 func (r *taskRepository) Update(task *model.Task) error {
-	return r.db.Save(task).Error
+	updates := make(map[string]interface{})
+	
+	// Always update these fields
+	updates["title"] = task.Title
+	updates["description"] = task.Description
+	updates["description_before"] = task.DescriptionBefore
+	updates["description_after"] = task.DescriptionAfter
+	updates["reason"] = task.Reason
+	updates["revision"] = task.Revision
+	updates["status"] = task.Status
+	updates["project_id"] = task.ProjectID
+	updates["created_by"] = task.CreatedBy
+	
+	// Optional pointer fields - dereference to get actual values
+	if task.StatusID != nil {
+		updates["status_id"] = *task.StatusID
+	}
+	if task.PriorityID != nil {
+		updates["priority_id"] = *task.PriorityID
+	}
+	if task.TypeID != nil {
+		updates["type_id"] = *task.TypeID
+	}
+	if task.StackID != nil {
+		updates["stack_id"] = *task.StackID
+	}
+	if task.AssignedID != nil {
+		updates["assigned_id"] = *task.AssignedID
+	}
+	if task.UpdatedBy != nil {
+		updates["updated_by"] = *task.UpdatedBy
+	}
+	if task.ApprovedBy != nil {
+		updates["approved_by"] = *task.ApprovedBy
+	}
+	if task.CompletedBy != nil {
+		updates["completed_by"] = *task.CompletedBy
+	}
+	if task.DoneBy != nil {
+		updates["done_by"] = *task.DoneBy
+	}
+	if task.ApprovalStatusID != nil {
+		updates["approval_status_id"] = *task.ApprovalStatusID
+	}
+	if task.StartDate != nil {
+		updates["start_date"] = *task.StartDate
+	}
+	if task.DueDate != nil {
+		updates["due_date"] = *task.DueDate
+	}
+	if task.CompletedDate != nil {
+		updates["completed_date"] = *task.CompletedDate
+	}
+	if task.ApprovalDate != nil {
+		updates["approval_date"] = *task.ApprovalDate
+	}
+	if task.DoneAt != nil {
+		updates["done_at"] = *task.DoneAt
+	}
+	
+	return r.db.Model(&model.Task{}).Where("id = ?", task.ID).Updates(updates).Error
 }
 
 func (r *taskRepository) Delete(id int64, domainID int64) error {
@@ -301,7 +363,38 @@ func (r *taskRepository) GetApprovalTaskBySequence(taskID int64, sequence int16)
 }
 
 func (r *taskRepository) UpdateApprovalTask(approvalTask *model.ApprovalTask) error {
-	return r.db.Save(approvalTask).Error
+	updates := map[string]interface{}{
+		"note": approvalTask.Note,
+	}
+	
+	if approvalTask.ApprovedBy != nil {
+		updates["approved_by"] = *approvalTask.ApprovedBy
+	}
+	if approvalTask.ApprovalStatusID != nil {
+		updates["approval_status_id"] = *approvalTask.ApprovalStatusID
+	}
+	if approvalTask.ApprovalDate != nil {
+		updates["approval_date"] = *approvalTask.ApprovalDate
+	}
+	
+	return r.db.Model(&model.ApprovalTask{}).Where("id = ?", approvalTask.ID).Updates(updates).Error
+}
+
+// UpdateTaskApprovalStatus updates only the approval-related fields of a task
+func (r *taskRepository) UpdateTaskApprovalStatus(taskID, approvalStatusID int64, approvedBy *int64, approvalDate *time.Time, updatedBy int64) error {
+	updates := map[string]interface{}{
+		"approval_status_id": approvalStatusID,
+		"updated_by":         updatedBy,
+	}
+	
+	if approvedBy != nil {
+		updates["approved_by"] = *approvedBy
+	}
+	if approvalDate != nil {
+		updates["approval_date"] = *approvalDate
+	}
+	
+	return r.db.Model(&model.Task{}).Where("id = ?", taskID).Updates(updates).Error
 }
 
 // Task Files
@@ -316,6 +409,15 @@ func (r *taskRepository) GetTaskFilesByTaskID(taskID int64) ([]model.TaskFile, e
 	var files []model.TaskFile
 	err := r.db.Where("task_id = ?", taskID).Find(&files).Error
 	return files, err
+}
+
+func (r *taskRepository) GetTaskFileByID(id int64) (*model.TaskFile, error) {
+	var file model.TaskFile
+	err := r.db.Where("id = ?", id).First(&file).Error
+	if err != nil {
+		return nil, err
+	}
+	return &file, nil
 }
 
 func (r *taskRepository) DeleteTaskFile(id int64) error {

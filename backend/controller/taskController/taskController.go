@@ -290,8 +290,18 @@ func (c *TaskController) Update(ctx *gin.Context) {
 
 	form, _ := ctx.MultipartForm()
 	files := form.File["files"]
+	
+	// Get deleted file IDs
+	var deletedFileIds []int64
+	if deletedIdsStr := ctx.PostFormArray("deleted_file_ids[]"); len(deletedIdsStr) > 0 {
+		for _, idStr := range deletedIdsStr {
+			if id, err := strconv.ParseInt(idStr, 10, 64); err == nil {
+				deletedFileIds = append(deletedFileIds, id)
+			}
+		}
+	}
 
-	task, err := c.taskService.Update(id, req, files, domainID.(int64), userID.(int64))
+	task, err := c.taskService.Update(id, req, files, deletedFileIds, domainID.(int64), userID.(int64))
 	if err != nil {
 		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to update task", err, nil)
 		return

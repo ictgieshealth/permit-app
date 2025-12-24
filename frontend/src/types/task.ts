@@ -69,6 +69,7 @@ export interface ApprovalTask {
   created_at: string;
   updated_at: string;
   approver?: UserBasic;
+  approved_by_user?: UserBasic;
   approval_status?: Reference;
 }
 

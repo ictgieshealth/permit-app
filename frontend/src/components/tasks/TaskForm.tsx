@@ -8,6 +8,9 @@ import Link from "next/link";
 import { Task, TaskCreateRequest, TaskUpdateRequest } from "@/types/task";
 import { taskService } from "@/services/task.service";
 import { projectService } from "@/services/project.service";
+import { referenceService } from "@/services/reference.service";
+import { userService } from "@/services/user.service";
+import FileUpload from "@/components/ui/FileUpload";
 
 interface TaskFormProps {
   code?: string;
@@ -25,6 +28,8 @@ export default function TaskForm({ code, isEdit = false }: TaskFormProps) {
   const [users, setUsers] = useState<any[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [existingTask, setExistingTask] = useState<Task | null>(null);
+  const [existingAttachments, setExistingAttachments] = useState<any[]>([]);
+  const [deletedFileIds, setDeletedFileIds] = useState<number[]>([]);
 
   const [formData, setFormData] = useState({
     project_id: "",
@@ -55,28 +60,33 @@ export default function TaskForm({ code, isEdit = false }: TaskFormProps) {
 
   const loadOptions = async () => {
     try {
-      // Load priorities (status 11-14 from references)
-      // For now using dummy data - replace with actual reference service call
-      setPriorities([
-        { id: 11, name: "Low" },
-        { id: 12, name: "Medium" },
-        { id: 13, name: "High" },
-        { id: 14, name: "Critical" },
-      ]);
+      // Load priorities from reference_category_id = 2 (Low, Medium, High)
+      const prioritiesResponse = await referenceService.getByCategoryId(2);
+      setPriorities(prioritiesResponse);
 
-      // Load stacks (status 15-19 from references)
-      setStacks([
-        { id: 15, name: "Frontend" },
-        { id: 16, name: "Backend" },
-        { id: 17, name: "Database" },
-        { id: 18, name: "DevOps" },
-        { id: 19, name: "Full Stack" },
-      ]);
+      // Load stacks from reference_category_id = 4 (Backend, Web, Mobile, DevOps, Database)
+      const stacksResponse = await referenceService.getByCategoryId(4);
+      setStacks(stacksResponse);
 
-      // Load users - replace with actual user service call
-      setUsers([]);
     } catch (err) {
       console.error("Failed to load options:", err);
+    }
+  };
+
+  useEffect(() => {
+    if (formData.project_id) {
+      loadUsersByProjectId(parseInt(formData.project_id));
+    } else {
+      setUsers([]);
+    }
+  }, [formData.project_id]);
+
+  const loadUsersByProjectId = async (projectId: number) => {
+    try {
+      const usersResponse = await projectService.getByProjectId(projectId);
+      setUsers(usersResponse);
+    } catch (err) {
+      console.error("Failed to load users by project ID:", err);
     }
   };
 
@@ -87,6 +97,12 @@ export default function TaskForm({ code, isEdit = false }: TaskFormProps) {
     try {
       const task = await taskService.getByCode(code);
       setExistingTask(task);
+      
+      // Load existing attachments
+      if (task.task_files && task.task_files.length > 0) {
+        setExistingAttachments(task.task_files);
+      }
+      
       setFormData({
         project_id: task.project_id.toString(),
         title: task.title,
@@ -114,10 +130,13 @@ export default function TaskForm({ code, isEdit = false }: TaskFormProps) {
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles(Array.from(e.target.files));
-    }
+  const handleFilesChange = (newFiles: File[]) => {
+    setFiles(newFiles);
+  };
+
+  const handleDeleteExistingFile = (fileId: number) => {
+    setDeletedFileIds([...deletedFileIds, fileId]);
+    setExistingAttachments(existingAttachments.filter(f => f.id !== fileId));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -143,7 +162,7 @@ export default function TaskForm({ code, isEdit = false }: TaskFormProps) {
             : undefined,
           due_date: formData.due_date || undefined,
         };
-        await taskService.update(existingTask.id, updateData, files);
+        await taskService.update(existingTask.id, updateData, files, deletedFileIds);
       } else {
         const createData: TaskCreateRequest = {
           project_id: parseInt(formData.project_id),
@@ -321,18 +340,77 @@ export default function TaskForm({ code, isEdit = false }: TaskFormProps) {
 
             <div className="md:col-span-2">
               <Label>Attachments</Label>
-              <input
-                type="file"
-                multiple
-                onChange={handleFileChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-              />
-              {files.length > 0 && (
-                <p className="mt-2 text-sm text-gray-500">
-                  {files.length} file(s) selected
-                </p>
+              
+              {/* Existing Attachments */}
+              {isEdit && existingAttachments.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Existing Attachments ({existingAttachments.length})
+                  </div>
+                  <div className="space-y-2">
+                    {existingAttachments.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg"
+                      >
+                        {/* File Icon */}
+                        <div className="flex-shrink-0">
+                          <div className="w-12 h-12 flex items-center justify-center text-2xl bg-white dark:bg-gray-900 rounded border border-blue-300 dark:border-blue-600">
+                            {file.file_type?.startsWith("image/") ? "🖼️" : 
+                             file.file_type?.includes("pdf") ? "📄" : 
+                             file.file_type?.includes("word") || file.file_type?.includes("document") ? "📝" : 
+                             file.file_type?.includes("sheet") || file.file_type?.includes("excel") ? "📊" : "📎"}
+                          </div>
+                        </div>
+
+                        {/* File Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {file.file_name}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">
+                            {file.file_size || "Unknown size"}
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <a
+                            href={`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/${file.file_path}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                          >
+                            View
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteExistingFile(file.id)}
+                            className="flex-shrink-0 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:hover:bg-red-900/50 rounded-lg transition-colors"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
+              
+              {/* New File Upload */}
+              <div>
+                <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  {isEdit ? "Add New Attachments" : "Upload Attachments"}
+                </div>
+                <FileUpload
+                  files={files}
+                  onChange={handleFilesChange}
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                  maxSize={10}
+                  maxFiles={5}
+                  multiple={true}
+                />
+              </div>
             </div>
           </div>
 

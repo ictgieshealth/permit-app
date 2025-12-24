@@ -7,8 +7,13 @@ import Link from "next/link";
 import { Task } from "@/types/task";
 import { taskService } from "@/services/task.service";
 import { projectService } from "@/services/project.service";
+import ActionDropdown from "@/components/ui/dropdown/ActionDropdown";
+import { ConfirmModal } from "@/components/ui/modal/ConfirmModal";
+import { useAuth } from "@/context/AuthContext";
+import { APPROVAL_STATUS, TASK_TYPE } from "@/constants/taskConstants";
 
 export default function TaskRequestsPage() {
+  const { user, currentRole } = useAuth();
   const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
@@ -32,6 +37,14 @@ export default function TaskRequestsPage() {
   }>({ isOpen: false, task: null, approvalTaskId: null, action: null });
   const [note, setNote] = useState("");
   const [processing, setProcessing] = useState(false);
+
+  const [typeChangeModal, setTypeChangeModal] = useState<{
+    isOpen: boolean;
+    task: Task | null;
+    newTypeId: number | null;
+    typeName: string;
+  }>({ isOpen: false, task: null, newTypeId: null, typeName: "" });
+  const [changingType, setChangingType] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -85,7 +98,7 @@ export default function TaskRequestsPage() {
   ) => {
     // Find the next approval task that needs action
     const pendingApproval = task.approval_tasks?.find(
-      (at) => at.approval_status_id === 20 // Waiting status
+      (at) => at.approval_status_id === APPROVAL_STATUS.WAITING
     );
 
     if (pendingApproval) {
@@ -136,6 +149,138 @@ export default function TaskRequestsPage() {
     }
   };
 
+  const handleChangeType = (task: Task, typeId: number, typeName: string) => {
+    setTypeChangeModal({
+      isOpen: true,
+      task,
+      newTypeId: typeId,
+      typeName,
+    });
+  };
+
+  const confirmChangeType = async () => {
+    if (!typeChangeModal.task || !typeChangeModal.newTypeId) return;
+
+    setChangingType(true);
+    try {
+      await taskService.update(typeChangeModal.task.id, {
+        project_id: typeChangeModal.task.project_id,
+        title: typeChangeModal.task.title,
+        description: typeChangeModal.task.description,
+        priority_id: typeChangeModal.task.priority_id!,
+        stack_id: typeChangeModal.task.stack_id!,
+        type_id: typeChangeModal.newTypeId,
+        assigned_id: typeChangeModal.task.assigned_id,
+        due_date: typeChangeModal.task.due_date,
+      });
+
+      setTypeChangeModal({
+        isOpen: false,
+        task: null,
+        newTypeId: null,
+        typeName: "",
+      });
+      loadTasks();
+    } catch (err: any) {
+      alert(err.message || "Failed to change task type");
+    } finally {
+      setChangingType(false);
+    }
+  };
+
+  const handleView = (task: Task) => {
+    router.push(`/tasks/show/${task.code}`);
+  };
+
+  const handleEdit = (task: Task) => {
+    router.push(`/tasks/edit/${task.code}`);
+  };
+
+  const handleDelete = async (task: Task) => {
+    if (!confirm(`Are you sure you want to delete task ${task.code}?`)) return;
+
+    try {
+      await taskService.delete(task.id);
+      loadTasks();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete task");
+    }
+  };
+
+  // Role helper functions
+  const hasAdminOrDev = () => {
+    if (!currentRole) return false;
+    return currentRole.name === "Ticketing Developer" || currentRole.name === "Admin";
+  };
+
+  const isTicketingPIC = () => {
+    if (!currentRole) return false;
+    return currentRole.name === "Ticketing PIC";
+  };
+
+  const isTicketingManager = () => {
+    if (!currentRole) return false;
+    return currentRole.name === "Ticketing Manager";
+  };
+
+  const isTicketingHeadOfUnit = () => {
+    if (!currentRole) return false;
+    return currentRole.name === "Ticketing Head of Unit";
+  };
+
+  // Permission checks - based on AdminTaskRequests.vue logic
+  const canApprove = (task: Task) => {
+    if (hasAdminOrDev()) return true;
+    
+    // Check manager approval
+    const headUnitApproval = task.approval_tasks?.find(
+      (at) => at.sequence === 1 && at.approval_status_id === APPROVAL_STATUS.WAITING
+    );
+    if (isTicketingManager()) {
+      const managerApproval = task.approval_tasks?.find(
+        (at) => at.sequence === 2 && at.approval_status_id === APPROVAL_STATUS.WAITING
+      );
+      
+      if (managerApproval && !headUnitApproval) return true;
+    }
+    
+    // Check head of unit approval
+    if (isTicketingHeadOfUnit()) {
+      if (headUnitApproval) return true;
+    }
+    
+    return false;
+  };
+
+  const canReject = (task: Task) => {
+    return canApprove(task);
+  };
+
+  const canEdit = (task: Task) => {
+    if (hasAdminOrDev()) return true;
+    if (isTicketingPIC() && task.approval_status?.name === "Waiting") return true;
+    return false;
+  };
+
+  const canDelete = (task: Task) => {
+    return isTicketingPIC() && task.approval_status?.name === "Waiting";
+  };
+
+  const canChangeType = () => {
+    // Only non-admin/dev can change type
+    return !hasAdminOrDev();
+  };
+
+  const shouldShowAction = (task: Task) => {
+    return (
+      canApprove(task) ||
+      canReject(task) ||
+      canEdit(task) ||
+      canDelete(task) ||
+      canChangeType()
+    );
+  };
+
   const getApprovalBadge = (approvalName?: string) => {
     const colors: Record<string, string> = {
       Waiting:
@@ -171,18 +316,26 @@ export default function TaskRequestsPage() {
             Review and approve or reject pending tasks
           </p>
         </div>
+        <Link href="/tasks/add">
+          <Button>Create New Task</Button>
+        </Link>
       </div>
 
       {/* Filters */}
       <div className="p-4 mb-6 bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Input
-            name="search"
-            type="text"
-            value={filters.search}
-            onChange={handleFilterChange}
-            placeholder="Search by code or title"
-          />
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Search
+            </label>
+            <Input
+              name="search"
+              type="text"
+              value={filters.search}
+              onChange={handleFilterChange}
+              placeholder="Search by code or title"
+            />
+          </div>
           <div>
             <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
               Project
@@ -220,7 +373,7 @@ export default function TaskRequestsPage() {
       </div>
 
       {/* Tasks Table */}
-      <div className="overflow-hidden bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
+      <div className="bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">
@@ -269,7 +422,7 @@ export default function TaskRequestsPage() {
               ) : (
                 tasks.map((task) => {
                   const pendingApproval = task.approval_tasks?.find(
-                    (at) => at.approval_status_id === 20
+                    (at) => at.approval_status_id === APPROVAL_STATUS.WAITING
                   );
 
                   return (
@@ -298,27 +451,30 @@ export default function TaskRequestsPage() {
                           : "-"}
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-right whitespace-nowrap">
-                        <Link
-                          href={`/tasks/show/${task.code}`}
-                          className="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                        >
-                          View
-                        </Link>
-                        {pendingApproval && (
-                          <>
-                            <button
-                              onClick={() => openApprovalModal(task, "approve")}
-                              className="mr-3 text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => openApprovalModal(task, "reject")}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                            >
-                              Reject
-                            </button>
-                          </>
+                        {shouldShowAction(task) && (
+                          <ActionDropdown
+                            data={task}
+                            index={tasks.indexOf(task)}
+                            totalRows={tasks.length}
+                            onView={handleView}
+                            onEdit={handleEdit}
+                            onDelete={handleDelete}
+                            onApprove={(t) => openApprovalModal(t, "approve")}
+                            onReject={(t) => openApprovalModal(t, "reject")}
+                            onDevelopment={(t) =>
+                              handleChangeType(t, TASK_TYPE.DEVELOPMENT, "Development")
+                            }
+                            onMaintenance={(t) =>
+                              handleChangeType(t, TASK_TYPE.MAINTENANCE, "Maintenance")
+                            }
+                            hideView={false}
+                            hideEdit={!canEdit(task)}
+                            hideDelete={!canDelete(task)}
+                            hideApprove={!canApprove(task)}
+                            hideReject={!canReject(task)}
+                            hideDevelopment={!canChangeType()}
+                            hideMaintenance={!canChangeType()}
+                          />
                         )}
                       </td>
                     </tr>
@@ -421,6 +577,25 @@ export default function TaskRequestsPage() {
           </div>
         </div>
       )}
+
+      {/* Type Change Modal */}
+      <ConfirmModal
+        isOpen={typeChangeModal.isOpen}
+        onClose={() =>
+          setTypeChangeModal({
+            isOpen: false,
+            task: null,
+            newTypeId: null,
+            typeName: "",
+          })
+        }
+        onConfirm={confirmChangeType}
+        title="Change Task Type"
+        message={`Are you sure you want to change task "${typeChangeModal.task?.code}" type to ${typeChangeModal.typeName}?`}
+        confirmText="Change Type"
+        type="warning"
+        loading={changingType}
+      />
     </div>
   );
 }

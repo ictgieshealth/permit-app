@@ -16,6 +16,6 @@ const (
 	TaskStatusRevision   = 39
 
 	// File upload paths
-	TaskFileUploadPath   = "file/permits/"
+	TaskFileUploadPath   = "file/tasks/"
 	PermitFileUploadPath = "file/permits/"
 )

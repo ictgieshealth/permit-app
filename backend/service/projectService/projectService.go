@@ -17,6 +17,7 @@ type ProjectService interface {
 	GetProjectByID(id int64) (*model.ProjectResponse, error)
 	GetProjectsByDomainID(domainID int64) ([]model.ProjectResponse, error)
 	GetProjectsByUserID(userID int64) ([]model.ProjectResponse, error)
+	GetUsersByProjectID(projectID int64) ([]model.UserBasicResponse, error)
 	UpdateProject(id int64, req model.ProjectUpdateRequest) (*model.ProjectResponse, error)
 	DeleteProject(id int64) error
 	ChangeProjectStatus(id int64, req model.ProjectStatusChangeRequest) (*model.ProjectResponse, error)
@@ -161,6 +162,25 @@ func (s *projectServiceImpl) GetProjectsByUserID(userID int64) ([]model.ProjectR
 	responses := make([]model.ProjectResponse, len(projects))
 	for i, project := range projects {
 		responses[i] = model.ToProjectResponse(&project)
+	}
+
+	return responses, nil
+}
+
+func (s *projectServiceImpl) GetUsersByProjectID(projectID int64) ([]model.UserBasicResponse, error) {
+	users, err := s.projectRepo.FindUsersByProjectID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	responses := make([]model.UserBasicResponse, len(users))
+	for i, user := range users {
+		responses[i] = model.UserBasicResponse{
+			ID:       user.ID,
+			Username: user.Username,
+			Email:    user.Email,
+			FullName: user.FullName,
+		}
 	}
 
 	return responses, nil

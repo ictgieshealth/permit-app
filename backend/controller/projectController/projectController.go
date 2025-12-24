@@ -182,6 +182,22 @@ func (c *ProjectController) GetProjectsByUserID(ctx *gin.Context) {
 	apiresponse.OK(ctx, result, "Projects retrieved successfully", nil)
 }
 
+func (c *ProjectController) GetUsersByProjectID(ctx *gin.Context) {
+	userID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		apiresponse.BadRequest(ctx, apiresponse.ErrCodeBadRequest, "Invalid user ID", err, nil)
+		return
+	}
+
+	result, err := c.projectService.GetUsersByProjectID(userID)
+	if err != nil {
+		apiresponse.InternalServerError(ctx, apiresponse.ErrCodeInternal, "Failed to retrieve projects", err, nil)
+		return
+	}
+
+	apiresponse.OK(ctx, result, "Projects retrieved successfully", nil)
+}
+
 // UpdateProject godoc
 // @Summary Update a project
 // @Tags Projects

@@ -16,7 +16,7 @@ type TaskService interface {
 	GetByCode(code string, domainID int64) (*model.TaskResponse, error)
 	GetAll(domainID int64, filters *model.TaskListRequest) ([]model.TaskResponse, int64, error)
 	GetAllRequests(domainID int64, filters *model.TaskListRequest) ([]model.TaskResponse, int64, error)
-	Update(id int64, req *model.TaskUpdateRequest, files []*multipart.FileHeader, domainID, userID int64) (*model.Task, error)
+	Update(id int64, req *model.TaskUpdateRequest, files []*multipart.FileHeader, deletedFileIds []int64, domainID, userID int64) (*model.Task, error)
 	Delete(id int64, domainID int64) error
 	ChangeStatus(id int64, req *model.TaskChangeStatusRequest, domainID, userID int64) error
 	ChangeType(id int64, req *model.TaskChangeTypeRequest, domainID, userID int64) error
@@ -204,7 +204,7 @@ func (s *taskService) GetAllRequests(domainID int64, filters *model.TaskListRequ
 	return responses, total, nil
 }
 
-func (s *taskService) Update(id int64, req *model.TaskUpdateRequest, files []*multipart.FileHeader, domainID, userID int64) (*model.Task, error) {
+func (s *taskService) Update(id int64, req *model.TaskUpdateRequest, files []*multipart.FileHeader, deletedFileIds []int64, domainID, userID int64) (*model.Task, error) {
 	task, err := s.taskRepo.GetByID(id, domainID)
 	if err != nil {
 		return nil, err
@@ -233,6 +233,13 @@ func (s *taskService) Update(id int64, req *model.TaskUpdateRequest, files []*mu
 
 	if err := s.taskRepo.Update(task); err != nil {
 		return nil, err
+	}
+
+	// Delete specified files
+	if len(deletedFileIds) > 0 {
+		if err := s.deleteTaskFiles(deletedFileIds); err != nil {
+			return nil, fmt.Errorf("failed to delete files: %v", err)
+		}
 	}
 
 	// Handle file uploads if any
@@ -294,8 +301,8 @@ func (s *taskService) SetRevision(id int64, req *model.TaskRevisionRequest, file
 }
 
 func (s *taskService) ApproveTask(taskID, approvalTaskID int64, req *model.ApprovalRequest, domainID, userID int64) error {
-	// Get task
-	task, err := s.taskRepo.GetByID(taskID, domainID)
+	// Verify task exists
+	_, err := s.taskRepo.GetByID(taskID, domainID)
 	if err != nil {
 		return err
 	}
@@ -325,11 +332,18 @@ func (s *taskService) ApproveTask(taskID, approvalTaskID int64, req *model.Appro
 
 	// Update approval task
 	now := time.Now()
+	approvalStatusID := int64(helper.ApprovalStatusApprove)
+	
+	// Clear relations to avoid GORM confusion with preloaded data
+	currentApproval.Approver = nil
+	currentApproval.ApprovalStatus = nil
+	currentApproval.Task = nil
+	
 	currentApproval.ApprovedBy = &userID
-	currentApproval.ApprovalStatusID = ptrInt64(helper.ApprovalStatusApprove)
+	currentApproval.ApprovalStatusID = &approvalStatusID
 	currentApproval.ApprovalDate = &now
 	currentApproval.Note = req.Note
-
+	
 	if err := s.taskRepo.UpdateApprovalTask(currentApproval); err != nil {
 		return err
 	}
@@ -338,22 +352,23 @@ func (s *taskService) ApproveTask(taskID, approvalTaskID int64, req *model.Appro
 	if currentApproval.Sequence == 1 {
 		// Sequence 1 approved - set status to Pending Manager
 		approvalStatusID := int64(helper.ApprovalStatusPendingManager)
-		task.ApprovalStatusID = &approvalStatusID
+		if err := s.taskRepo.UpdateTaskApprovalStatus(taskID, approvalStatusID, nil, nil, userID); err != nil {
+			return err
+		}
 	} else if currentApproval.Sequence == 2 {
 		// Sequence 2 approved - task fully approved
 		approvalStatusID := int64(helper.ApprovalStatusApprove)
-		task.ApprovalStatusID = &approvalStatusID
-		task.ApprovedBy = &userID
-		task.ApprovalDate = &now
+		if err := s.taskRepo.UpdateTaskApprovalStatus(taskID, approvalStatusID, &userID, &now, userID); err != nil {
+			return err
+		}
 	}
 
-	task.UpdatedBy = &userID
-	return s.taskRepo.Update(task)
+	return nil
 }
 
 func (s *taskService) RejectTask(taskID, approvalTaskID int64, req *model.ApprovalRequest, domainID, userID int64) error {
-	// Get task
-	task, err := s.taskRepo.GetByID(taskID, domainID)
+	// Verify task exists
+	_, err := s.taskRepo.GetByID(taskID, domainID)
 	if err != nil {
 		return err
 	}
@@ -385,9 +400,15 @@ func (s *taskService) RejectTask(taskID, approvalTaskID int64, req *model.Approv
 
 	// If sequence 1 is rejected, reject all sequences
 	if currentApproval.Sequence == 1 {
+		rejectStatusID := int64(helper.ApprovalStatusReject)
 		for i := range approvalTasks {
+			// Clear relations
+			approvalTasks[i].Approver = nil
+			approvalTasks[i].ApprovalStatus = nil
+			approvalTasks[i].Task = nil
+			
 			approvalTasks[i].ApprovedBy = &userID
-			approvalTasks[i].ApprovalStatusID = ptrInt64(helper.ApprovalStatusReject)
+			approvalTasks[i].ApprovalStatusID = &rejectStatusID
 			approvalTasks[i].ApprovalDate = &now
 			approvalTasks[i].Note = req.Note
 
@@ -397,8 +418,15 @@ func (s *taskService) RejectTask(taskID, approvalTaskID int64, req *model.Approv
 		}
 	} else {
 		// Reject only current sequence
+		rejectStatusID := int64(helper.ApprovalStatusReject)
+		
+		// Clear relations
+		currentApproval.Approver = nil
+		currentApproval.ApprovalStatus = nil
+		currentApproval.Task = nil
+		
 		currentApproval.ApprovedBy = &userID
-		currentApproval.ApprovalStatusID = ptrInt64(helper.ApprovalStatusReject)
+		currentApproval.ApprovalStatusID = &rejectStatusID
 		currentApproval.ApprovalDate = &now
 		currentApproval.Note = req.Note
 
@@ -409,10 +437,7 @@ func (s *taskService) RejectTask(taskID, approvalTaskID int64, req *model.Approv
 
 	// Update task approval status to Reject
 	approvalStatusID := int64(helper.ApprovalStatusReject)
-	task.ApprovalStatusID = &approvalStatusID
-	task.UpdatedBy = &userID
-
-	return s.taskRepo.Update(task)
+	return s.taskRepo.UpdateTaskApprovalStatus(taskID, approvalStatusID, nil, nil, userID)
 }
 
 // Helper functions
@@ -447,6 +472,27 @@ func (s *taskService) uploadTaskFiles(taskID int64, files []*multipart.FileHeade
 	}
 
 	return s.taskRepo.CreateTaskFiles(taskFiles)
+}
+
+func (s *taskService) deleteTaskFiles(fileIds []int64) error {
+	for _, fileId := range fileIds {
+		// Get file info first to delete physical file
+		taskFile, err := s.taskRepo.GetTaskFileByID(fileId)
+		if err != nil {
+			continue // Skip if file not found
+		}
+
+		// Delete physical file
+		if taskFile.FilePath != "" {
+			helper.DeleteFile(taskFile.FilePath)
+		}
+
+		// Delete from database
+		if err := s.taskRepo.DeleteTaskFile(fileId); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *taskService) toTaskResponse(task *model.Task) *model.TaskResponse {

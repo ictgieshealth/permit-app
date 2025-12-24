@@ -8,9 +8,12 @@ import { Task } from "@/types/task";
 import { taskService } from "@/services/task.service";
 import { projectService } from "@/services/project.service";
 import { ConfirmModal } from "@/components/ui/modal/ConfirmModal";
+import TaskActionsDropdown from "@/components/ui/dropdown/TaskActionsDropdown";
+import { useAuth } from "@/context/AuthContext";
 
 export default function TasksPage() {
   const router = useRouter();
+  const { currentRole } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +35,24 @@ export default function TasksPage() {
     taskCode: string;
   }>({ isOpen: false, taskId: null, taskCode: "" });
   const [deleting, setDeleting] = useState(false);
+  const [statusModal, setStatusModal] = useState<{
+    isOpen: boolean;
+    task: Task | null;
+    action: string;
+    statusId: number;
+  }>({ isOpen: false, task: null, action: "", statusId: 0 });
+  const [typeModal, setTypeModal] = useState<{
+    isOpen: boolean;
+    task: Task | null;
+    action: string;
+    typeId: number;
+  }>({ isOpen: false, task: null, action: "", typeId: 0 });
+  const [reasonModal, setReasonModal] = useState<{
+    isOpen: boolean;
+    task: Task | null;
+    reason: string;
+  }>({ isOpen: false, task: null, reason: "" });
+  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     loadProjects();
@@ -99,6 +120,120 @@ export default function TasksPage() {
     } finally {
       setDeleting(false);
     }
+  };
+
+  // Status change handlers
+  const handleStatusChange = (task: Task, action: string, statusId: number) => {
+    if (action === "done" && task.status_id !== 3 && task.status_id !== 37) {
+      alert("Task must be in 'On Progress' or 'In Review' status to be marked as done.");
+      return;
+    }
+    setStatusModal({ isOpen: true, task, action, statusId });
+  };
+
+  const confirmStatusChange = async () => {
+    if (!statusModal.task) return;
+
+    setProcessing(true);
+    try {
+      await taskService.changeStatus(statusModal.task.id, {
+        status_id: statusModal.statusId,
+      });
+      setStatusModal({ isOpen: false, task: null, action: "", statusId: 0 });
+      loadTasks();
+    } catch (err: any) {
+      alert(err.message || "Failed to change task status");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Type change handlers
+  const handleTypeChange = (task: Task, action: string, typeId: number) => {
+    setTypeModal({ isOpen: true, task, action, typeId });
+  };
+
+  const confirmTypeChange = async () => {
+    if (!typeModal.task) return;
+
+    setProcessing(true);
+    try {
+      await taskService.changeType(typeModal.task.id, {
+        type_id: typeModal.typeId,
+      });
+      setTypeModal({ isOpen: false, task: null, action: "", typeId: 0 });
+      loadTasks();
+    } catch (err: any) {
+      alert(err.message || "Failed to change task type");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Reason handler
+  const handleAddReason = (task: Task) => {
+    setReasonModal({ isOpen: true, task, reason: "" });
+  };
+
+  const confirmAddReason = async () => {
+    if (!reasonModal.task || !reasonModal.reason) {
+      alert("Please enter a reason");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      await taskService.setReason(reasonModal.task.id, {
+        reason: reasonModal.reason,
+      });
+      setReasonModal({ isOpen: false, task: null, reason: "" });
+      loadTasks();
+    } catch (err: any) {
+      alert(err.message || "Failed to add reason");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // Action handlers
+  const handleTodo = (task: Task) => {
+    handleStatusChange(task, "todo", 1);
+  };
+
+  const handleStart = (task: Task) => {
+    handleStatusChange(task, "start", 3);
+  };
+
+  const handleOnHold = (task: Task) => {
+    handleStatusChange(task, "onHold", 2);
+  };
+
+  const handleDone = (task: Task) => {
+    handleStatusChange(task, "done", 4);
+  };
+
+  const handleInReview = (task: Task) => {
+    router.push(`/tasks/in-review/${task.code}`);
+  };
+
+  const handleShow = (task: Task) => {
+    router.push(`/tasks/show/${task.code}`);
+  };
+
+  const handleEdit = (task: Task) => {
+    router.push(`/tasks/edit/${task.code}`);
+  };
+
+  const handleRevision = (task: Task) => {
+    router.push(`/tasks/revision/${task.code}`);
+  };
+
+  const handleDevelopment = (task: Task) => {
+    handleTypeChange(task, "development", 25);
+  };
+
+  const handleMaintenance = (task: Task) => {
+    handleTypeChange(task, "maintenance", 24);
   };
 
   const getStatusBadge = (statusName?: string) => {
@@ -181,13 +316,18 @@ export default function TasksPage() {
       {/* Filters */}
       <div className="p-4 mb-6 bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Input
-            name="search"
-            type="text"
-            value={filters.search}
-            onChange={handleFilterChange}
-            placeholder="Search by code or title"
-          />
+          <div>
+            <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Search
+            </label>
+            <Input
+              name="search"
+              type="text"
+              value={filters.search}
+              onChange={handleFilterChange}
+              placeholder="Search by code or title"
+            />
+          </div>
           <div>
             <label className="block mb-2 text-sm font-medium text-gray-700 dark:text-gray-300">
               Project
@@ -227,7 +367,7 @@ export default function TasksPage() {
       </div>
 
       {/* Tasks Table */}
-      <div className="overflow-hidden bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
+      <div className="bg-white border border-gray-200 rounded-lg dark:bg-gray-dark dark:border-gray-800">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">
@@ -280,7 +420,7 @@ export default function TasksPage() {
                   </td>
                 </tr>
               ) : (
-                tasks.map((task) => (
+                tasks.map((task, index) => (
                   <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
                     <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap dark:text-white">
                       {task.code}
@@ -309,24 +449,24 @@ export default function TasksPage() {
                         : "-"}
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-right whitespace-nowrap">
-                      <Link
-                        href={`/tasks/show/${task.code}`}
-                        className="mr-3 text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                      >
-                        View
-                      </Link>
-                      <Link
-                        href={`/tasks/edit/${task.code}`}
-                        className="mr-3 text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300"
-                      >
-                        Edit
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(task.id, task.code)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                      >
-                        Delete
-                      </button>
+                      <TaskActionsDropdown
+                        task={task}
+                        index={index}
+                        totalRows={tasks.length}
+                        userRole={currentRole?.name || null}
+                        onTodo={handleTodo}
+                        onStart={handleStart}
+                        onHold={handleOnHold}
+                        onDone={handleDone}
+                        onInReview={handleInReview}
+                        onShow={handleShow}
+                        onAddReason={handleAddReason}
+                        onRevision={handleRevision}
+                        onEdit={handleEdit}
+                        onDelete={() => handleDelete(task.id, task.code)}
+                        onDevelopment={handleDevelopment}
+                        onMaintenance={handleMaintenance}
+                      />
                     </td>
                   </tr>
                 ))
@@ -382,6 +522,68 @@ export default function TasksPage() {
         cancelText="Cancel"
         loading={deleting}
       />
+
+      {/* Status Change Confirmation Modal */}
+      <ConfirmModal
+        isOpen={statusModal.isOpen}
+        onClose={() =>
+          setStatusModal({ isOpen: false, task: null, action: "", statusId: 0 })
+        }
+        onConfirm={confirmStatusChange}
+        title={`Change Task Status to ${statusModal.action}`}
+        message={`Are you sure you want to change task "${statusModal.task?.code}" to ${statusModal.action}?`}
+        confirmText="Confirm"
+        cancelText="Cancel"
+        loading={processing}
+      />
+
+      {/* Type Change Confirmation Modal */}
+      <ConfirmModal
+        isOpen={typeModal.isOpen}
+        onClose={() =>
+          setTypeModal({ isOpen: false, task: null, action: "", typeId: 0 })
+        }
+        onConfirm={confirmTypeChange}
+        title={`Change Task Type to ${typeModal.action}`}
+        message={`Are you sure you want to change task "${typeModal.task?.code}" type to ${typeModal.action}?`}
+        confirmText="Confirm"
+        cancelText="Cancel"
+        loading={processing}
+      />
+
+      {/* Add Reason Modal */}
+      {reasonModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="w-full max-w-md p-6 bg-white rounded-lg dark:bg-gray-800">
+            <h2 className="mb-4 text-xl font-semibold text-gray-900 dark:text-white">
+              Add Reason for Task "{reasonModal.task?.code}"
+            </h2>
+            <textarea
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              rows={4}
+              placeholder="Enter reason..."
+              value={reasonModal.reason}
+              onChange={(e) =>
+                setReasonModal({ ...reasonModal, reason: e.target.value })
+              }
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                onClick={() =>
+                  setReasonModal({ isOpen: false, task: null, reason: "" })
+                }
+                variant="outline"
+                disabled={processing}
+              >
+                Cancel
+              </Button>
+              <Button onClick={confirmAddReason} disabled={processing}>
+                {processing ? "Saving..." : "Save Reason"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

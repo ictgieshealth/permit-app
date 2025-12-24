@@ -7,6 +7,7 @@ import {
   ProjectListRequest,
   ProjectStatusChangeRequest,
 } from "@/types/project";
+import { User } from "@/types/user";
 
 export const projectService = {
   async getAll(
@@ -52,6 +53,14 @@ export const projectService = {
   async getByUserId(userId: number): Promise<Project[]> {
     const response = await apiClient.get<ApiResponse<Project[]>>(
       `/users/${userId}/projects`
+    );
+    return response.data;
+  },
+
+  // user by project id
+  async getByProjectId(projectId: number): Promise<User[]> {
+    const response = await apiClient.get<ApiResponse<User[]>>(
+      `/projects/${projectId}/users`
     );
     return response.data;
   },

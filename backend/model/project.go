@@ -42,6 +42,7 @@ type ProjectRequest struct {
 // ProjectUpdateRequest represents the request body for updating a project
 type ProjectUpdateRequest struct {
 	Name            string  `json:"name" validate:"required,max=255"`
+	Code            string  `json:"code" validate:"omitempty,max=100"`
 	Description     string  `json:"description" validate:"required"`
 	Status          *bool   `json:"status"`
 	ProjectStatusID *int64  `json:"project_status_id"`

@@ -107,7 +107,7 @@ export const taskService = {
     return response.data;
   },
 
-  async update(id: number, data: TaskUpdateRequest, files?: File[]): Promise<Task> {
+  async update(id: number, data: TaskUpdateRequest, files?: File[], deletedFileIds?: number[]): Promise<Task> {
     const formData = new FormData();
 
     // Append all fields
@@ -121,6 +121,13 @@ export const taskService = {
     if (files && files.length > 0) {
       files.forEach((file) => {
         formData.append("files", file);
+      });
+    }
+
+    // Append deleted file IDs
+    if (deletedFileIds && deletedFileIds.length > 0) {
+      deletedFileIds.forEach((id) => {
+        formData.append("deleted_file_ids[]", id.toString());
       });
     }
 

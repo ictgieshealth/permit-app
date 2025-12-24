@@ -132,6 +132,9 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 	app.Use(cors.New(corsConfig()))
 	app.OPTIONS("/*any", func(c *gin.Context) { c.Status(204) })
 
+	// Serve static files
+	app.Static("/file", "./file")
+
 	/* API Routes */
 
 	// Public routes (no authentication required)
@@ -276,6 +279,8 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 			project.PUT("/:id", projectCtrl.UpdateProject)
 			project.DELETE("/:id", projectCtrl.DeleteProject)
 			project.POST("/:id/change-status", projectCtrl.ChangeProjectStatus)
+
+			project.GET("/:id/users", projectCtrl.GetUsersByProjectID)
 		}
 
 		// Domain-specific project endpoints

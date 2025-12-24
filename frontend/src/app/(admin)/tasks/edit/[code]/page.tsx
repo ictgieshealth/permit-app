@@ -6,6 +6,7 @@ interface EditTaskPageProps {
   };
 }
 
-export default function EditTaskPage({ params }: EditTaskPageProps) {
-  return <TaskForm code={params.code} isEdit={true} />;
+export default async function EditTaskPage({ params }: EditTaskPageProps) {
+  const { code } = await params;
+  return <TaskForm code={code} isEdit={true} />;
 }
