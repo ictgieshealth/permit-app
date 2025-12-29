@@ -2,3 +2,6 @@
 tools/
 tmp/
 main
+
+# file task
+file/*
