@@ -71,7 +71,7 @@ func (s *projectServiceImpl) CreateProject(req model.ProjectRequest) (*model.Pro
 
 	// Assign users to project if provided
 	if len(req.UserIDs) > 0 {
-		if err := s.projectRepo.AssignUsers(project.ID, req.DomainID, req.UserIDs); err != nil {
+		if err := s.projectRepo.AssignUsers(project.ID, req.UserIDs); err != nil {
 			return nil, err
 		}
 	}
@@ -213,7 +213,7 @@ func (s *projectServiceImpl) UpdateProject(id int64, req model.ProjectUpdateRequ
 
 	// Update user assignments if provided
 	if req.UserIDs != nil {
-		if err := s.projectRepo.AssignUsers(project.ID, project.DomainID, req.UserIDs); err != nil {
+		if err := s.projectRepo.AssignUsers(project.ID, req.UserIDs); err != nil {
 			return nil, err
 		}
 	}
@@ -243,7 +243,7 @@ func (s *projectServiceImpl) DeleteProject(id int64) error {
 	}
 
 	// Delete user assignments first
-	if err := s.projectRepo.AssignUsers(project.ID, project.DomainID, []int64{}); err != nil {
+	if err := s.projectRepo.AssignUsers(project.ID, []int64{}); err != nil {
 		return err
 	}
 

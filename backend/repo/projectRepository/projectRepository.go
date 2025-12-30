@@ -17,7 +17,7 @@ type ProjectRepository interface {
 	Update(project *model.Project) error
 	UpdateFields(id int64, fields map[string]interface{}) error
 	Delete(id int64) error
-	AssignUsers(projectID, domainID int64, userIDs []int64) error
+	AssignUsers(projectID int64, userIDs []int64) error
 	RemoveUsers(projectID int64, userIDs []int64) error
 	GetProjectUsers(projectID int64) ([]model.User, error)
 }
@@ -109,8 +109,8 @@ func (r *projectRepositoryImpl) FindByUserID(userID int64) ([]model.Project, err
 		Preload("Domain").
 		Preload("ProjectStatus").
 		Preload("Users").
-		Joins("JOIN user_domain_projects ON user_domain_projects.project_id = projects.id").
-		Where("user_domain_projects.user_id = ?", userID).
+		Joins("JOIN user_projects ON user_projects.project_id = projects.id").
+		Where("user_projects.user_id = ?", userID).
 		Order("projects.created_at DESC").
 		Find(&projects).Error
 	return projects, err
@@ -119,8 +119,8 @@ func (r *projectRepositoryImpl) FindByUserID(userID int64) ([]model.Project, err
 func (r *projectRepositoryImpl) FindUsersByProjectID(projectID int64) ([]model.User, error) {
 	var users []model.User
 	err := r.db.
-		Joins("JOIN user_domain_projects ON user_domain_projects.user_id = users.id").
-		Where("user_domain_projects.project_id = ?", projectID).
+		Joins("JOIN user_projects ON user_projects.user_id = users.id").
+		Where("user_projects.project_id = ?", projectID).
 		Find(&users).Error
 
 	return users, err
@@ -138,19 +138,18 @@ func (r *projectRepositoryImpl) Delete(id int64) error {
 	return r.db.Delete(&model.Project{}, id).Error
 }
 
-func (r *projectRepositoryImpl) AssignUsers(projectID, domainID int64, userIDs []int64) error {
+func (r *projectRepositoryImpl) AssignUsers(projectID int64, userIDs []int64) error {
 	// First, remove existing assignments
-	if err := r.db.Where("project_id = ? AND domain_id = ?", projectID, domainID).Delete(&model.UserDomainProject{}).Error; err != nil {
+	if err := r.db.Where("project_id = ?", projectID).Delete(&model.UserProject{}).Error; err != nil {
 		return err
 	}
 
 	// Then, create new assignments
 	if len(userIDs) > 0 {
-		assignments := make([]model.UserDomainProject, len(userIDs))
+		assignments := make([]model.UserProject, len(userIDs))
 		for i, userID := range userIDs {
-			assignments[i] = model.UserDomainProject{
+			assignments[i] = model.UserProject{
 				UserID:    userID,
-				DomainID:  domainID,
 				ProjectID: projectID,
 			}
 		}
@@ -161,14 +160,14 @@ func (r *projectRepositoryImpl) AssignUsers(projectID, domainID int64, userIDs [
 }
 
 func (r *projectRepositoryImpl) RemoveUsers(projectID int64, userIDs []int64) error {
-	return r.db.Where("project_id = ? AND user_id IN ?", projectID, userIDs).Delete(&model.UserDomainProject{}).Error
+	return r.db.Where("project_id = ? AND user_id IN ?", projectID, userIDs).Delete(&model.UserProject{}).Error
 }
 
 func (r *projectRepositoryImpl) GetProjectUsers(projectID int64) ([]model.User, error) {
 	var users []model.User
 	err := r.db.
-		Joins("JOIN user_domain_projects ON user_domain_projects.user_id = users.id").
-		Where("user_domain_projects.project_id = ?", projectID).
+		Joins("JOIN user_projects ON user_projects.user_id = users.id").
+		Where("user_projects.project_id = ?", projectID).
 		Find(&users).Error
 	return users, err
 }

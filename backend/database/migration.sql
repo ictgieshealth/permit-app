@@ -13,7 +13,7 @@ DROP TABLE IF EXISTS notifications CASCADE;
 DROP TABLE IF EXISTS permits CASCADE;
 DROP TABLE IF EXISTS permit_types CASCADE;
 DROP TABLE IF EXISTS divisions CASCADE;
-DROP TABLE IF EXISTS user_domain_projects CASCADE;
+DROP TABLE IF EXISTS user_projects CASCADE;
 DROP TABLE IF EXISTS projects CASCADE;
 DROP TABLE IF EXISTS "references" CASCADE;
 DROP TABLE IF EXISTS reference_categories CASCADE;
@@ -225,19 +225,17 @@ CREATE TABLE projects (
     UNIQUE(domain_id, code)
 );
 
--- Create User-Domain-Project junction table
--- Users can be assigned to projects within specific domains
-CREATE TABLE user_domain_projects (
+-- Create User-Project junction table
+-- Users can be assigned to projects (domain is already in project relation)
+CREATE TABLE user_projects (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL,
-    domain_id BIGINT NOT NULL,
     project_id BIGINT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
-    UNIQUE(user_id, domain_id, project_id)
+    UNIQUE(user_id, project_id)
 );
 
 -- Create Tasks table for task management module
@@ -333,9 +331,8 @@ CREATE INDEX idx_references_is_active ON "references"(is_active);
 CREATE INDEX idx_roles_code ON roles(code);
 CREATE INDEX idx_roles_name ON roles(name);
 CREATE INDEX idx_roles_category ON roles(category);
-CREATE INDEX idx_user_domain_projects_user_id ON user_domain_projects(user_id);
-CREATE INDEX idx_user_domain_projects_domain_id ON user_domain_projects(domain_id);
-CREATE INDEX idx_user_domain_projects_project_id ON user_domain_projects(project_id);
+CREATE INDEX idx_user_projects_user_id ON user_projects(user_id);
+CREATE INDEX idx_user_projects_project_id ON user_projects(project_id);
 CREATE INDEX idx_tasks_domain_id ON tasks(domain_id);
 CREATE INDEX idx_tasks_project_id ON tasks(project_id);
 CREATE INDEX idx_tasks_code ON tasks(code);
@@ -586,13 +583,13 @@ INSERT INTO projects (domain_id, name, code, description, status, project_status
 (1, 'RS TRIA DIPA', 'rs-tria-dipa', 'Hospital Management System for RS TRIA DIPA', true, 26),
 (2, 'RS BHC SUMENEP', 'rs-bhc-sumenep', 'Hospital Management System for RS BHC SUMENEP', true, 26);
 
--- Sample User-Domain-Project assignments
+-- Sample User-Project assignments
 -- Admin is assigned to both projects
-INSERT INTO user_domain_projects (user_id, domain_id, project_id) VALUES
-(1, 1, 1),  -- admin -> RS-TRIADIPA domain -> RS TRIA DIPA project
-(1, 2, 2),  -- admin -> RS-BHC-SUMENEP domain -> RS BHC SUMENEP project
+INSERT INTO user_projects (user_id, project_id) VALUES
+(1, 1),  -- admin -> RS TRIA DIPA project
+(1, 2),  -- admin -> RS BHC SUMENEP project
 -- Permit Manager assigned to project 1
-(2, 1, 1),  -- manager1 -> RS-TRIADIPA domain -> RS TRIA DIPA project
+(2, 1),  -- manager1 -> RS TRIA DIPA project
 -- Permit Employee assigned to both projects
 (3, 1, 1),  -- employee1 -> RS-TRIADIPA domain -> RS TRIA DIPA project
 (3, 2, 2),  -- employee1 -> RS-BHC-SUMENEP domain -> RS BHC SUMENEP project
@@ -659,7 +656,7 @@ CREATE TRIGGER update_permits_updated_at BEFORE UPDATE ON permits
 CREATE TRIGGER update_projects_updated_at BEFORE UPDATE ON projects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_user_domain_projects_updated_at BEFORE UPDATE ON user_domain_projects
+CREATE TRIGGER update_user_projects_updated_at BEFORE UPDATE ON user_projects
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Add comments to tables

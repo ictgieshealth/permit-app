@@ -21,7 +21,7 @@ type Project struct {
 	// Relations
 	Domain        *Domain    `gorm:"foreignKey:DomainID" json:"domain,omitempty"`
 	ProjectStatus *Reference `gorm:"foreignKey:ProjectStatusID" json:"project_status,omitempty"`
-	Users         []User     `gorm:"many2many:user_domain_projects;foreignKey:ID;joinForeignKey:ProjectID;References:ID;joinReferences:UserID" json:"users,omitempty"`
+	Users         []User     `gorm:"many2many:user_projects;foreignKey:ID;joinForeignKey:ProjectID;References:ID;joinReferences:UserID" json:"users,omitempty"`
 }
 
 func (Project) TableName() string {
